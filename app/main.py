@@ -101,9 +101,9 @@ def data_text(
     limit: int = Query(default=1000, ge=1, le=10000),
 ):
     result = data(sources=sources, format=format, family=family, offset=offset, limit=limit)
-    body = "\\n".join(result['data'])
+    body = "\n".join(result['data'])
     if body:
-        body += "\\n"
+        body += "\n"
     return PlainTextResponse(
         body,
         headers={
