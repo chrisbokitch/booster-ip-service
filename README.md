@@ -1,6 +1,6 @@
 # Booster IP Service
 
-Local-first source ingestion service for booster IP/CIDR feeds. **Phase 1**: configuration, ingestion, snapshots, and source status. Aggregation and the web UI come in later phases.
+Local-first source ingestion service for booster IP/CIDR feeds. **Phases 1–2**: configuration, ingestion, snapshots, normalization, cross-source aggregation, and paginated IP/CIDR output. The web UI comes later.
 
 ## Windows / Git Bash
 
@@ -31,5 +31,16 @@ This development server binds only to localhost and has **no authentication**. D
 
 - No scheduled refresh yet; manual refresh only.
 - No source edit/delete endpoints yet.
-- No combined deduplication/CIDR conversion API or web UI yet.
+- No web UI yet.
 - SQLite stores the latest successful snapshot per source and refresh history.
+
+## Phase 2 data API
+
+`GET /api/v1/data` combines the latest snapshots from all **enabled** sources by default. Use `sources=uubooster,heybox` to explicitly select sources (including disabled sources with existing snapshots). Source IDs are validated; unknown IDs return 404.
+
+Examples:
+- `/api/v1/data?format=cidr`
+- `/api/v1/data?sources=uubooster,heybox&format=cidr&family=ipv4`
+- `/api/v1/data?sources=heybox&format=ip&limit=1000&offset=0`
+
+Output includes `data`, `total` (total records for the requested output format), `count` (returned page size), `sources`, and per-source refresh metadata. Results are sorted by IP version and numeric address, with overlapping/adjacent ranges collapsed. IP output includes all addresses in each range (including IPv4 network and broadcast addresses); pages are generated lazily rather than expanding entire networks. Maximum page size: 10,000. No snapshot means no records, not an automatic fetch.
