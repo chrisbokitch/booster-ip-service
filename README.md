@@ -1,6 +1,6 @@
 # Booster IP Service
 
-Local-first source ingestion service for booster IP/CIDR feeds. **Phases 1–2**: configuration, ingestion, snapshots, normalization, cross-source aggregation, and paginated IP/CIDR output. The web UI comes later.
+Local-first source ingestion service for booster IP/CIDR feeds. **Phases 1–4**: configuration, ingestion, snapshots, normalization, cross-source aggregation, paginated IP/CIDR output, and a lightweight local dashboard.
 
 ## Windows / Git Bash
 
@@ -12,7 +12,7 @@ npm test
 npm run dev
 ```
 
-Visit http://127.0.0.1:8000/docs for the interactive API interface.
+Visit http://127.0.0.1:8000/ for the dashboard or http://127.0.0.1:8000/docs for the interactive API interface.
 
 ## Initial sources
 
@@ -31,7 +31,7 @@ This development server binds only to localhost and has **no authentication**. D
 
 - No scheduled refresh yet; manual refresh only.
 - No source edit/delete endpoints yet.
-- No web UI yet.
+- Dashboard is local-only; no authentication or public deployment support yet.
 - SQLite stores the latest successful snapshot per source and refresh history.
 
 ## Phase 2 data API
@@ -78,3 +78,9 @@ A text export is newline-separated, with a trailing newline for nonempty pages. 
 Error responses: 404 for unknown source IDs; 422 for invalid query parameters or an empty explicit source selection. A source with no snapshot contributes no records, and `complete=false` signals missing source snapshots. A stale source still contributes its last successful snapshot. Neither endpoint refreshes feeds. API documentation is available at `/docs` and the OpenAPI schema at `/openapi.json`.
 
 **Deployment note:** This is a local-only unauthenticated development API. Do not expose either endpoint publicly until access policy and authentication are decided.
+
+## Phase 4: local dashboard
+
+Open `http://127.0.0.1:8000/` after `npm run dev`. The dashboard uses plain HTML, CSS, and JavaScript, served directly by FastAPI with no frontend build step or extra dependencies. It shows source readiness, last successful refresh, record counts and errors; offers per-source manual refresh; and displays paginated combined CIDR or individual-IP output with address-family selection, copy-page, and download-page controls.
+
+Copy and download apply **only to the displayed page**. A source refresh fetches the upstream feed and updates its stored snapshot; output is then reloaded. Disabled sources cannot be refreshed through the dashboard. The dashboard is intended for localhost use only: its refresh actions are unauthenticated, so do not expose the server to untrusted clients.
