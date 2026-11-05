@@ -36,7 +36,7 @@ def validate_source(source):
         raise HTTPException(422, 'Invalid source format')
     if source.format == 'json' and not source.json_path:
         raise HTTPException(422, 'JSON source requires json_path')
-    if source.json_path and not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*', source.json_path):
+    if source.json_path and not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*', source.json_path):
         raise HTTPException(422, 'Invalid JSON path')
     if source.url.scheme != 'https' or source.url.username or source.url.password:
         raise HTTPException(422, 'HTTPS without credentials is required')
