@@ -16,6 +16,7 @@ def test_existing_api_routes_still_exist():
     paths = {route.path for route in main.app.routes}
     assert "/api/v1/data" in paths
     assert "/api/v1/data.txt" not in paths
+    assert "/api/v1/sources/{source_id}/records" not in paths
     assert "/api/v1/sources/{source_id}/refresh" in paths
 
 
