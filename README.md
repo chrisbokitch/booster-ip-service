@@ -100,3 +100,9 @@ The local dashboard now supports adding sources, editing name/URL/format/JSON pa
 `PUT /api/v1/sources/{source_id}` updates a source, `DELETE /api/v1/sources/{source_id}` removes it, and `POST /api/v1/sources/refresh-all` refreshes each enabled source independently, returning per-source success/failure and totals. Automatic scheduling and refresh-history UI remain future work.
 
 **Security:** These management endpoints are unauthenticated and must remain localhost-only. Do not expose the service on the public internet.
+
+## Phase 5.2: automatic refresh and history
+
+Edit a source to enable an automatic refresh interval (1, 6, 12 or 24 hours, or a custom interval of 1–10,080 minutes). Automatic refresh is **off by default**. Intervals and next-run timestamps are persisted in SQLite; disabling a source pauses its schedule. When enabled or reconfigured, the first automatic refresh is scheduled one interval later. Manual refreshes also reset the next scheduled run. A lightweight application-lifecycle worker checks for due refreshes every 30 seconds, while a per-source in-process lock prevents simultaneous manual/scheduled refreshes. Run the app with a single worker process; cross-process scheduling coordination is not implemented.
+
+The History button displays recent success/failure events, record counts and errors. API: `GET /api/v1/sources/{source_id}/history?limit=50` (limit 1–200). Failed fetches retain prior snapshots and advance the next scheduled run. The scheduler only runs while the application is running; after restart, overdue schedules are picked up on the next scan. Avoid exposing the unauthenticated service beyond localhost.
