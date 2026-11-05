@@ -17,11 +17,12 @@ def test_json_pagination_and_text_export(tmp_path, monkeypatch):
     assert result["total"] == 4
     assert result["has_more"] is True
     assert result["next_offset"] == 2
-    text = client.get("/api/v1/data.txt", params={"sources": "heybox", "format": "ip", "offset": 2, "limit": 2})
+    text = client.get("/api/v1/data", params={"output": "list", "sources": "heybox", "format": "ip", "offset": 2, "limit": 2})
     assert text.status_code == 200
     assert text.headers["content-type"].startswith("text/plain")
     assert text.text == "192.0.2.2\n192.0.2.3\n"
     assert text.headers["x-total-count"] == "4"
+    assert client.get("/api/v1/data.txt").status_code == 404
     assert text.headers["x-data-complete"] == "true"
     assert text.headers["x-has-more"] == "false"
     assert text.headers["x-next-offset"] == ""
@@ -35,7 +36,7 @@ def test_export_validates_sources_and_limits(tmp_path, monkeypatch):
     assert client.get("/api/v1/data.txt", params={"sources": "missing"}).status_code == 404
     assert client.get("/api/v1/data.txt", params={"limit": 1000001}).status_code == 422
     assert client.get("/api/v1/data.txt", params={"sources": " "}).status_code == 422
-    response = client.get("/api/v1/data.txt")
+    response = client.get("/api/v1/data", params={"output": "list"})
     assert response.status_code == 200
     assert response.text == ""
     assert response.headers["x-data-complete"] == "false"
@@ -51,3 +52,13 @@ def test_custom_limit_over_ten_thousand(tmp_path, monkeypatch):
     assert response.status_code == 200
     assert response.json()["count"] == 12000
     assert response.json()["has_more"] is True
+
+
+def test_output_parameter_validation(tmp_path, monkeypatch):
+    path = tmp_path / "service.db"
+    init_db(path)
+    monkeypatch.setattr(main, "DB_PATH", str(path))
+    client = TestClient(main.app)
+    assert client.get("/api/v1/data", params={"output": "csv"}).status_code == 422
+    assert client.get("/api/v1/data").headers["content-type"].startswith("application/json")
+    assert "/api/v1/data.txt" not in {route.path for route in main.app.routes}
