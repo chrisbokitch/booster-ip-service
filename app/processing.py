@@ -44,6 +44,15 @@ def page_networks(networks, output_format="cidr", offset=0, limit=1000):
     return result, total
 
 
+def source_data_status(source):
+    """Snapshot availability and last refresh outcome, independent of age."""
+    if source["last_success"] is None:
+        return "pending"
+    if source["last_error"] is not None:
+        return "stale"
+    return "ready"
+
+
 def get_data(path, selected=None, family="all", output_format="cidr", offset=0, limit=1000):
     with connect(path) as db:
         available = {row["id"]: dict(row) for row in db.execute("SELECT * FROM sources")}
@@ -57,15 +66,18 @@ def get_data(path, selected=None, family="all", output_format="cidr", offset=0, 
         if not ids:
             return {"sources": [], "format": output_format, "family": family,
                     "count": 0, "total": 0, "offset": offset, "limit": limit,
-                    "data": [], "source_status": {}}
+                    "data": [], "complete": True, "source_status": {}}
         placeholders = ",".join("?" for _ in ids)
         records = [row["network"] for row in db.execute(
             f"SELECT network FROM records WHERE source_id IN ({placeholders})", ids)]
         status = {key: {"last_success": available[key]["last_success"],
                         "last_error": available[key]["last_error"],
-                        "enabled": bool(available[key]["enabled"])} for key in ids}
+                        "enabled": bool(available[key]["enabled"]),
+                        "data_status": source_data_status(available[key])} for key in ids}
     networks = aggregate(records, family)
     items, total = page_networks(networks, output_format, offset, limit)
     return {"sources": ids, "format": output_format, "family": family,
             "count": len(items), "total": total, "offset": offset,
-            "limit": limit, "data": items, "source_status": status}
+            "limit": limit, "data": items,
+            "complete": all(entry["data_status"] != "pending" for entry in status.values()),
+            "source_status": status}
