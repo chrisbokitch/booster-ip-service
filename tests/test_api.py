@@ -20,7 +20,7 @@ def test_json_pagination_and_text_export(tmp_path, monkeypatch):
     text = client.get("/api/v1/data.txt", params={"sources": "heybox", "format": "ip", "offset": 2, "limit": 2})
     assert text.status_code == 200
     assert text.headers["content-type"].startswith("text/plain")
-    assert text.text == "192.0.2.2\\n192.0.2.3\\n"
+    assert text.text == "192.0.2.2\n192.0.2.3\n"
     assert text.headers["x-total-count"] == "4"
     assert text.headers["x-data-complete"] == "true"
     assert text.headers["x-has-more"] == "false"
