@@ -33,9 +33,21 @@ def test_export_validates_sources_and_limits(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "DB_PATH", str(path))
     client = TestClient(main.app)
     assert client.get("/api/v1/data.txt", params={"sources": "missing"}).status_code == 404
-    assert client.get("/api/v1/data.txt", params={"limit": 10001}).status_code == 422
+    assert client.get("/api/v1/data.txt", params={"limit": 1000001}).status_code == 422
     assert client.get("/api/v1/data.txt", params={"sources": " "}).status_code == 422
     response = client.get("/api/v1/data.txt")
     assert response.status_code == 200
     assert response.text == ""
     assert response.headers["x-data-complete"] == "false"
+
+def test_custom_limit_over_ten_thousand(tmp_path, monkeypatch):
+    path = tmp_path / "service.db"
+    init_db(path)
+    monkeypatch.setattr(main, "DB_PATH", str(path))
+    with connect(path) as db:
+        db.execute("INSERT INTO records VALUES (?,?)", ("heybox", "10.0.0.0/18"))
+    client = TestClient(main.app)
+    response = client.get("/api/v1/data", params={"sources": "heybox", "format": "ip", "limit": 12000})
+    assert response.status_code == 200
+    assert response.json()["count"] == 12000
+    assert response.json()["has_more"] is True
