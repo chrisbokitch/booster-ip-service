@@ -130,11 +130,11 @@ async function showHistory(row) {
     const entries = await api("/api/v1/sources/" + encodeURIComponent(row.id) + "/history");
     const table = document.createElement("table");
     const head = document.createElement("tr");
-    for (const label of ["Time", "Result", "Records / error"]) head.append(node("th", label));
+    for (const label of ["Time", "Trigger", "Result", "Records / error"]) head.append(node("th", label));
     table.append(head);
     for (const entry of entries) {
       const tr = document.createElement("tr");
-      tr.append(node("td", fmtDate(entry.at)), node("td", entry.success ? "Success" : "Failed"),
+      tr.append(node("td", fmtDate(entry.at)), node("td", entry.trigger === "scheduled" ? "Scheduled" : entry.trigger === "manual" ? "Manual" : "Unknown"), node("td", entry.success ? "Success" : "Failed"),
         node("td", entry.success ? String(entry.count) : (entry.error || "Unknown error")));
       table.append(tr);
     }
