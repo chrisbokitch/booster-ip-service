@@ -84,3 +84,7 @@ Error responses: 404 for unknown source IDs; 422 for invalid query parameters or
 Open `http://127.0.0.1:8000/` after `npm run dev`. The dashboard uses plain HTML, CSS, and JavaScript, served directly by FastAPI with no frontend build step or extra dependencies. It shows source readiness, last successful refresh, record counts and errors; offers per-source manual refresh; and displays paginated combined CIDR or individual-IP output with address-family selection, copy-page, and download-page controls.
 
 Copy and download apply **only to the displayed page**. A source refresh fetches the upstream feed and updates its stored snapshot; output is then reloaded. Disabled sources cannot be refreshed through the dashboard. The dashboard is intended for localhost use only: its refresh actions are unauthenticated, so do not expose the server to untrusted clients.
+
+### Dashboard source and page controls
+
+The combined output has checkboxes for individual enabled sources (all enabled sources selected initially), plus a **Select all enabled** shortcut. Unchecking every source shows an empty selection rather than silently querying all enabled sources. The page size is a custom integer between 1 and 10,000, validated before requesting data. Changing source selection, format, family, or page size returns to the first page. Disabled sources remain visible in source status but cannot be selected in the dashboard.
