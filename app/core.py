@@ -2,10 +2,15 @@
 import ipaddress
 import json
 import sqlite3
+import threading
+from datetime import timedelta
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
 import httpx
+
+_refresh_locks = {}
+_refresh_locks_guard = threading.Lock()
 
 DEFAULT_SOURCES = [
     ("uubooster", "uuBooster", "https://uu-ovproxylist.easebar.com:8889/acc_exitip_ov_cidr_aggregated.txt", "cidr_text", None),
@@ -38,6 +43,11 @@ def init_db(path):
           at TEXT NOT NULL, success INTEGER NOT NULL, count INTEGER, error TEXT
         );
         """)
+        columns = {row["name"] for row in db.execute("PRAGMA table_info(sources)")}
+        if "refresh_interval_minutes" not in columns:
+            db.execute("ALTER TABLE sources ADD COLUMN refresh_interval_minutes INTEGER")
+        if "next_refresh" not in columns:
+            db.execute("ALTER TABLE sources ADD COLUMN next_refresh TEXT")
         db.execute("CREATE TABLE IF NOT EXISTS deleted_sources (id TEXT PRIMARY KEY)")
         for source in DEFAULT_SOURCES:
             db.execute("INSERT OR IGNORE INTO sources(id,name,url,format,json_path) SELECT ?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM deleted_sources WHERE id=?)", (*source, source[0]))
@@ -76,7 +86,7 @@ def parse_feed(raw, fmt, json_path=None):
     return sorted(networks, key=lambda n: (ipaddress.ip_network(n).version, int(ipaddress.ip_network(n).network_address), ipaddress.ip_network(n).prefixlen))
 
 
-def refresh_source(path, source_id, *, client=None):
+def _refresh_source(path, source_id, *, client=None):
     now = datetime.now(timezone.utc).isoformat()
     with connect(path) as db:
         row = db.execute("SELECT * FROM sources WHERE id=?", (source_id,)).fetchone()
@@ -105,8 +115,45 @@ def refresh_source(path, source_id, *, client=None):
             db.executemany("INSERT INTO records(source_id,network) VALUES (?,?)", [(source_id,n) for n in networks])
             db.execute("UPDATE sources SET last_success=?, last_error=NULL WHERE id=?", (now,source_id))
             db.execute("INSERT INTO refresh_history(source_id,at,success,count) VALUES (?,?,1,?)", (source_id,now,len(networks)))
+            _advance_schedule(db, source_id, now)
             return {"source":source_id,"count":len(networks),"refreshed_at":now}
         except Exception as exc:
             db.execute("UPDATE sources SET last_error=? WHERE id=?", (str(exc),source_id))
             db.execute("INSERT INTO refresh_history(source_id,at,success,error) VALUES (?,?,0,?)", (source_id,now,str(exc)))
+            _advance_schedule(db, source_id, now)
             raise
+
+def _advance_schedule(db, source_id, at):
+    row = db.execute("SELECT enabled, refresh_interval_minutes FROM sources WHERE id=?", (source_id,)).fetchone()
+    if row is None:
+        return
+    interval = row["refresh_interval_minutes"] if row["enabled"] else None
+    next_at = (datetime.fromisoformat(at) + timedelta(minutes=interval)).isoformat() if interval else None
+    db.execute("UPDATE sources SET next_refresh=? WHERE id=?", (next_at, source_id))
+
+
+def refresh_source(path, source_id, *, client=None):
+    # Prevent overlapping manual and scheduled refreshes within the running process.
+    with _refresh_locks_guard:
+        lock = _refresh_locks.setdefault((str(path), source_id), threading.Lock())
+    if not lock.acquire(blocking=False):
+        raise RuntimeError("Source refresh already in progress")
+    try:
+        return _refresh_source(path, source_id, client=client)
+    finally:
+        lock.release()
+
+
+def refresh_due_sources(path, now=None):
+    now = now or datetime.now(timezone.utc)
+    with connect(path) as db:
+        ids = [row["id"] for row in db.execute(
+            "SELECT id FROM sources WHERE enabled=1 AND refresh_interval_minutes IS NOT NULL "
+            "AND next_refresh IS NOT NULL AND next_refresh<=? ORDER BY next_refresh",
+            (now.isoformat(),))]
+    for source_id in ids:
+        try:
+            refresh_source(path, source_id)
+        except Exception:
+            # Failures are recorded by refresh_source; concurrent manual refresh owns the schedule.
+            pass
