@@ -54,3 +54,27 @@ Both `GET /api/v1/sources` and the `source_status` entries in `GET /api/v1/data`
 - `stale`: a successful snapshot exists, but a later refresh failed; cached records remain available.
 
 `GET /api/v1/data` includes `complete`: `true` when **every selected source has a successful snapshot**, including stale snapshots; `false` when at least one selected source is pending. An empty source selection is vacuously complete. `complete` is an availability indicator, **not a freshness guarantee**. Check `data_status` and `last_success` for freshness. Source status is based on the latest recorded refresh result, not an elapsed-time threshold.
+
+## Phase 3: consumption and pagination
+
+The service supports two representations of the **same stored data**:
+
+| Endpoint | Content type | Intended use |
+| --- | --- | --- |
+| `GET /api/v1/data` | `application/json` | Structured consumers and monitoring |
+| `GET /api/v1/data.txt` | `text/plain` | Firewalls, scripts, and tools expecting one entry per line |
+
+Both accept `sources`, `format=cidr|ip`, `family=all|ipv4|ipv6`, `offset`, and `limit`. Pagination is zero-based, with a default limit of 1,000 and maximum of 10,000. The JSON endpoint adds `has_more` and `next_offset` (null at the end). The text endpoint provides `X-Total-Count`, `X-Result-Count`, `X-Data-Complete`, `X-Has-More`, and `X-Next-Offset` response headers (empty when no next page).
+
+Examples:
+
+```bash
+curl 'http://127.0.0.1:8000/api/v1/data.txt?format=cidr&limit=10000' -o booster-cidrs.txt
+curl 'http://127.0.0.1:8000/api/v1/data?format=ip&family=ipv4&limit=1000&offset=0'
+```
+
+A text export is newline-separated, with a trailing newline for nonempty pages. An empty result is an empty body. **Text exports are paginated, not an unbounded full download**; check the headers for more pages. The default limit of 1,000 may truncate CIDR results when the list grows.
+
+Error responses: 404 for unknown source IDs; 422 for invalid query parameters or an empty explicit source selection. A source with no snapshot contributes no records, and `complete=false` signals missing source snapshots. A stale source still contributes its last successful snapshot. Neither endpoint refreshes feeds. API documentation is available at `/docs` and the OpenAPI schema at `/openapi.json`.
+
+**Deployment note:** This is a local-only unauthenticated development API. Do not expose either endpoint publicly until access policy and authentication are decided.
