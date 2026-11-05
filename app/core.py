@@ -43,6 +43,9 @@ def init_db(path):
           at TEXT NOT NULL, success INTEGER NOT NULL, count INTEGER, error TEXT
         );
         """)
+        history_columns = {row["name"] for row in db.execute("PRAGMA table_info(refresh_history)")}
+        if "trigger" not in history_columns:
+            db.execute("ALTER TABLE refresh_history ADD COLUMN trigger TEXT")
         columns = {row["name"] for row in db.execute("PRAGMA table_info(sources)")}
         if "refresh_interval_minutes" not in columns:
             db.execute("ALTER TABLE sources ADD COLUMN refresh_interval_minutes INTEGER")
@@ -86,7 +89,7 @@ def parse_feed(raw, fmt, json_path=None):
     return sorted(networks, key=lambda n: (ipaddress.ip_network(n).version, int(ipaddress.ip_network(n).network_address), ipaddress.ip_network(n).prefixlen))
 
 
-def _refresh_source(path, source_id, *, client=None):
+def _refresh_source(path, source_id, *, client=None, trigger="manual"):
     now = datetime.now(timezone.utc).isoformat()
     with connect(path) as db:
         row = db.execute("SELECT * FROM sources WHERE id=?", (source_id,)).fetchone()
@@ -114,12 +117,12 @@ def _refresh_source(path, source_id, *, client=None):
             db.execute("DELETE FROM records WHERE source_id=?", (source_id,))
             db.executemany("INSERT INTO records(source_id,network) VALUES (?,?)", [(source_id,n) for n in networks])
             db.execute("UPDATE sources SET last_success=?, last_error=NULL WHERE id=?", (now,source_id))
-            db.execute("INSERT INTO refresh_history(source_id,at,success,count) VALUES (?,?,1,?)", (source_id,now,len(networks)))
+            db.execute("INSERT INTO refresh_history(source_id,at,success,count,trigger) VALUES (?,?,1,?,?)", (source_id,now,len(networks),trigger))
             _advance_schedule(db, source_id, now)
             return {"source":source_id,"count":len(networks),"refreshed_at":now}
         except Exception as exc:
             db.execute("UPDATE sources SET last_error=? WHERE id=?", (str(exc),source_id))
-            db.execute("INSERT INTO refresh_history(source_id,at,success,error) VALUES (?,?,0,?)", (source_id,now,str(exc)))
+            db.execute("INSERT INTO refresh_history(source_id,at,success,error,trigger) VALUES (?,?,0,?,?)", (source_id,now,str(exc),trigger))
             _advance_schedule(db, source_id, now)
             raise
 
@@ -132,14 +135,16 @@ def _advance_schedule(db, source_id, at):
     db.execute("UPDATE sources SET next_refresh=? WHERE id=?", (next_at, source_id))
 
 
-def refresh_source(path, source_id, *, client=None):
+def refresh_source(path, source_id, *, client=None, trigger="manual"):
+    if trigger not in ("manual", "scheduled"):
+        raise ValueError("Invalid refresh trigger")
     # Prevent overlapping manual and scheduled refreshes within the running process.
     with _refresh_locks_guard:
         lock = _refresh_locks.setdefault((str(path), source_id), threading.Lock())
     if not lock.acquire(blocking=False):
         raise RuntimeError("Source refresh already in progress")
     try:
-        return _refresh_source(path, source_id, client=client)
+        return _refresh_source(path, source_id, client=client, trigger=trigger)
     finally:
         lock.release()
 
@@ -153,7 +158,7 @@ def refresh_due_sources(path, now=None):
             (now.isoformat(),))]
     for source_id in ids:
         try:
-            refresh_source(path, source_id)
+            refresh_source(path, source_id, trigger="scheduled")
         except Exception:
             # Failures are recorded by refresh_source; concurrent manual refresh owns the schedule.
             pass
