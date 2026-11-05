@@ -2,7 +2,7 @@
 import ipaddress
 from .core import connect
 
-MAX_IP_PAGE = 10000
+MAX_IP_PAGE = 1000000
 
 
 def aggregate(networks, family="all"):
