@@ -78,7 +78,7 @@ def data(
     format: Literal['cidr', 'ip'] = 'cidr',
     family: Literal['all', 'ipv4', 'ipv6'] = 'all',
     offset: int = Query(default=0, ge=0),
-    limit: int = Query(default=1000, ge=1, le=10000),
+    limit: int = Query(default=1000, ge=1, le=1000000),
 ):
     selected = None if sources is None else [s.strip() for s in sources.split(',') if s.strip()]
     if sources is not None and not selected:
@@ -100,7 +100,7 @@ def data_text(
     format: Literal['cidr', 'ip'] = 'cidr',
     family: Literal['all', 'ipv4', 'ipv6'] = 'all',
     offset: int = Query(default=0, ge=0),
-    limit: int = Query(default=1000, ge=1, le=10000),
+    limit: int = Query(default=1000, ge=1, le=1000000),
 ):
     result = data(sources=sources, format=format, family=family, offset=offset, limit=limit)
     body = "\n".join(result['data'])
