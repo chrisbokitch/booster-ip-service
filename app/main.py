@@ -67,7 +67,9 @@ def records(source_id: str):
 
 from typing import Literal
 from fastapi import Query
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
 from .processing import get_data
 
 @app.get('/api/v1/data')
@@ -114,3 +116,10 @@ def data_text(
             'X-Next-Offset': str(result['next_offset']) if result['next_offset'] is not None else '',
         },
     )
+
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+@app.get("/", include_in_schema=False)
+def dashboard():
+    return FileResponse(STATIC_DIR / "index.html")
