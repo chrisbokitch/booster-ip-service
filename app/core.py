@@ -38,8 +38,9 @@ def init_db(path):
           at TEXT NOT NULL, success INTEGER NOT NULL, count INTEGER, error TEXT
         );
         """)
+        db.execute("CREATE TABLE IF NOT EXISTS deleted_sources (id TEXT PRIMARY KEY)")
         for source in DEFAULT_SOURCES:
-            db.execute("INSERT OR IGNORE INTO sources(id,name,url,format,json_path) VALUES (?,?,?,?,?)", source)
+            db.execute("INSERT OR IGNORE INTO sources(id,name,url,format,json_path) SELECT ?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM deleted_sources WHERE id=?)", (*source, source[0]))
 
 
 def parse_feed(raw, fmt, json_path=None):
