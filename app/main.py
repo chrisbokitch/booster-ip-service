@@ -1,10 +1,12 @@
 import os
 import re
+import threading
+from datetime import datetime, timezone, timedelta
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field, HttpUrl
 from sqlite3 import IntegrityError
-from .core import connect, init_db, refresh_source
+from .core import connect, init_db, refresh_source, refresh_due_sources
 from .processing import source_data_status
 
 DB_PATH = os.environ.get('BOOSTER_DB', 'data/booster.sqlite3')
@@ -12,7 +14,21 @@ DB_PATH = os.environ.get('BOOSTER_DB', 'data/booster.sqlite3')
 @asynccontextmanager
 async def lifespan(app):
     init_db(DB_PATH)
-    yield
+    stop = threading.Event()
+    def scheduler():
+        while not stop.wait(30):
+            try:
+                refresh_due_sources(DB_PATH)
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception("Scheduled refresh scan failed")
+    worker = threading.Thread(target=scheduler, name="booster-refresh", daemon=True)
+    worker.start()
+    try:
+        yield
+    finally:
+        stop.set()
+        worker.join(timeout=2)
 
 app = FastAPI(title='Booster IP Service', version='0.1.0', lifespan=lifespan)
 
@@ -22,6 +38,7 @@ class SourceConfig(BaseModel):
     format: str
     json_path: str | None = None
     enabled: bool = True
+    refresh_interval_minutes: int | None = Field(default=None, ge=1, le=10080)
 
 class SourceInput(SourceConfig):
     id: str = Field(pattern=r'^[a-z][a-z0-9_-]{1,63}$')
@@ -42,6 +59,10 @@ def validate_source(source):
         raise HTTPException(422, 'HTTPS without credentials is required')
 
 
+def schedule_next(enabled, minutes):
+    return (datetime.now(timezone.utc) + timedelta(minutes=minutes)).isoformat() if enabled and minutes else None
+
+
 @app.get('/api/v1/health')
 def health():
     return {'status':'ok'}
@@ -56,7 +77,9 @@ def create_source(source: SourceInput):
     validate_source(source)
     with connect(DB_PATH) as db:
         try:
-            db.execute('INSERT INTO sources(id,name,url,format,json_path,enabled) VALUES (?,?,?,?,?,?)', (source.id,source.name,str(source.url),source.format,source.json_path,int(source.enabled)))
+            db.execute('INSERT INTO sources(id,name,url,format,json_path,enabled,refresh_interval_minutes,next_refresh) VALUES (?,?,?,?,?,?,?,?)',
+                       (source.id,source.name,str(source.url),source.format,source.json_path,int(source.enabled),
+                        source.refresh_interval_minutes, schedule_next(source.enabled, source.refresh_interval_minutes)))
         except IntegrityError:
             raise HTTPException(409,'Source ID already exists')
     return {'id':source.id}
@@ -72,9 +95,13 @@ def update_source(source_id: str, source: SourceConfig):
                    or previous['json_path'] != source.json_path)
         db.execute('UPDATE sources SET name=?,url=?,format=?,json_path=?,enabled=?,'
                    'last_success=CASE WHEN ? THEN NULL ELSE last_success END,'
-                   'last_error=CASE WHEN ? THEN NULL ELSE last_error END WHERE id=?',
+                   'last_error=CASE WHEN ? THEN NULL ELSE last_error END,'
+                   'refresh_interval_minutes=?,next_refresh=? WHERE id=?',
                    (source.name, str(source.url), source.format, source.json_path,
-                    int(source.enabled), changed, changed, source_id))
+                    int(source.enabled), changed, changed, source.refresh_interval_minutes,
+                    (previous['next_refresh'] if previous['enabled'] and source.enabled
+                     and previous['refresh_interval_minutes'] == source.refresh_interval_minutes and not changed
+                     else schedule_next(source.enabled, source.refresh_interval_minutes)), source_id))
         if changed:
             db.execute('DELETE FROM records WHERE source_id=?', (source_id,))
     return {'id': source_id, 'snapshot_cleared': changed}
@@ -89,6 +116,18 @@ def delete_source(source_id: str):
         db.execute('DELETE FROM refresh_history WHERE source_id=?', (source_id,))
         db.execute('DELETE FROM records WHERE source_id=?', (source_id,))
         db.execute('DELETE FROM sources WHERE id=?', (source_id,))
+
+
+@app.get('/api/v1/sources/{source_id}/history')
+def source_history(source_id: str, limit: int = 50):
+    if not 1 <= limit <= 200:
+        raise HTTPException(422, 'History limit must be between 1 and 200')
+    with connect(DB_PATH) as db:
+        if not db.execute('SELECT 1 FROM sources WHERE id=?', (source_id,)).fetchone():
+            raise HTTPException(404, 'Unknown source')
+        return [dict(row) for row in db.execute(
+            'SELECT at,success,count,error FROM refresh_history WHERE source_id=? ORDER BY id DESC LIMIT ?',
+            (source_id, limit))]
 
 
 @app.post('/api/v1/sources/refresh-all')
