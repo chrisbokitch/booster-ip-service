@@ -63,3 +63,23 @@ def records(source_id: str):
         if not db.execute('SELECT 1 FROM sources WHERE id=?',(source_id,)).fetchone():
             raise HTTPException(404,'Unknown source')
         return {'source':source_id,'networks':[r['network'] for r in db.execute('SELECT network FROM records WHERE source_id=? ORDER BY network',(source_id,))]}
+
+from typing import Literal
+from fastapi import Query
+from .processing import get_data
+
+@app.get('/api/v1/data')
+def data(
+    sources: str | None = Query(default=None, description="Comma-separated source IDs; omit for all enabled sources"),
+    format: Literal['cidr', 'ip'] = 'cidr',
+    family: Literal['all', 'ipv4', 'ipv6'] = 'all',
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=1000, ge=1, le=10000),
+):
+    selected = None if sources is None else [s.strip() for s in sources.split(',') if s.strip()]
+    if sources is not None and not selected:
+        raise HTTPException(422, 'Specify at least one source')
+    try:
+        return get_data(DB_PATH, selected, family, format, offset, limit)
+    except KeyError as exc:
+        raise HTTPException(404, f'Unknown source: {exc}')
