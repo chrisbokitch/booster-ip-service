@@ -93,9 +93,9 @@ def test_scheduling_and_history(tmp_path, monkeypatch):
     assert client.put("/api/v1/sources/heybox", json=dict(payload, refresh_interval_minutes=0)).status_code == 422
     assert client.put("/api/v1/sources/heybox", json=dict(payload, refresh_interval_minutes=10081)).status_code == 422
     calls = []
-    monkeypatch.setattr("app.core.refresh_source", lambda db, source_id: calls.append(source_id))
+    monkeypatch.setattr("app.core.refresh_source", lambda db, source_id, *, trigger="manual": calls.append((source_id, trigger)))
     refresh_due_sources(path)
-    assert calls == ["heybox"]
+    assert calls == [("heybox", "scheduled")]
     assert client.put("/api/v1/sources/heybox", json=dict(payload, enabled=False)).status_code == 200
     row = next(x for x in client.get("/api/v1/sources").json() if x["id"] == "heybox")
     assert row["next_refresh"] is None
