@@ -92,3 +92,11 @@ The combined output has checkboxes for individual enabled sources (all enabled s
 ### Page size presets
 
 The dashboard offers 1,000 (default), 10,000, and Custom buttons. Custom enables an integer field for 1–1,000,000 results. The same upper bound is enforced by the API to avoid unbounded memory and response sizes, especially when expanding CIDRs into individual IP addresses. Large pages may be slow and memory-intensive; pagination remains recommended.
+
+## Phase 5: manual source management
+
+The local dashboard now supports adding sources, editing name/URL/format/JSON path/enabled status, removing sources, and refreshing all enabled sources. Source IDs are immutable after creation. Editing the feed URL, format, or JSON path **clears the old snapshot** to prevent publishing data associated with an outdated feed definition; refresh the source to populate it again. Changing name or enabled status preserves its snapshot. Deletion removes the source, its snapshot, and its refresh history. Deleted built-in sources are not silently re-created on restart; a source with the same ID can be manually added later.
+
+`PUT /api/v1/sources/{source_id}` updates a source, `DELETE /api/v1/sources/{source_id}` removes it, and `POST /api/v1/sources/refresh-all` refreshes each enabled source independently, returning per-source success/failure and totals. Automatic scheduling and refresh-history UI remain future work.
+
+**Security:** These management endpoints are unauthenticated and must remain localhost-only. Do not expose the service on the public internet.
