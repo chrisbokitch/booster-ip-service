@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field, HttpUrl
 from .core import connect, init_db, refresh_source
+from .processing import source_data_status
 
 DB_PATH = os.environ.get('BOOSTER_DB', 'data/booster.sqlite3')
 
@@ -29,7 +30,7 @@ def health():
 @app.get('/api/v1/sources')
 def sources():
     with connect(DB_PATH) as db:
-        return [dict(row) for row in db.execute('SELECT s.*, (SELECT COUNT(*) FROM records r WHERE r.source_id=s.id) AS record_count FROM sources s ORDER BY id')]
+        return [{**dict(row), 'data_status': source_data_status(row)} for row in db.execute('SELECT s.*, (SELECT COUNT(*) FROM records r WHERE r.source_id=s.id) AS record_count FROM sources s ORDER BY id')]
 
 @app.post('/api/v1/sources', status_code=201)
 def create_source(source: SourceInput):
