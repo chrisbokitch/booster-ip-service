@@ -4,6 +4,7 @@ let page = null, offset = 0, sources = [];
 let selectedSources = null;
 let limitMode = "1000";
 let editingSource = null;
+const isEditor = window.location.pathname === "/edit";
 async function api(url, options) {
   const response = await fetch(url, {cache:"no-store", ...options});
   if (!response.ok) {
@@ -69,7 +70,10 @@ async function loadSources() {
     const actions = node("div", "", "source-actions");
     const history = node("button", "History");
     history.type = "button"; history.addEventListener("click", () => showHistory(row));
-    actions.append(refresh, edit, history, remove);
+    actions.append(refresh);
+    if (isEditor) actions.append(edit);
+    actions.append(history);
+    if (isEditor) actions.append(remove);
     card.append(actions); target.append(card);
   }
   if (!rows.length) target.textContent = "No sources configured.";
@@ -147,7 +151,7 @@ function updateIntervalInput() {
   el("source-custom-interval-wrap").hidden = !custom;
   el("source-custom-interval").required = custom;
 }
-el("source-interval").addEventListener("change", updateIntervalInput);
+if (isEditor) el("source-interval").addEventListener("change", updateIntervalInput);
 function openSourceDialog(row = null) {
   editingSource = row ? row.id : null;
   el("source-form").reset();
@@ -166,9 +170,9 @@ function openSourceDialog(row = null) {
   el("source-form-error").textContent = "";
   el("source-dialog").showModal();
 }
-el("add-source").addEventListener("click", () => openSourceDialog());
-el("cancel-source").addEventListener("click", () => el("source-dialog").close());
-el("source-form").addEventListener("submit", async event => {
+if (isEditor) el("add-source").addEventListener("click", () => openSourceDialog());
+if (isEditor) el("cancel-source").addEventListener("click", () => el("source-dialog").close());
+if (isEditor) el("source-form").addEventListener("submit", async event => {
   event.preventDefault();
   const payload = {
     name: el("source-name").value.trim(), url: el("source-url").value.trim(),
