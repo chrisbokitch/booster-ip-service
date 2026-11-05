@@ -33,9 +33,9 @@ def test_export_validates_sources_and_limits(tmp_path, monkeypatch):
     init_db(path)
     monkeypatch.setattr(main, "DB_PATH", str(path))
     client = TestClient(main.app)
-    assert client.get("/api/v1/data.txt", params={"sources": "missing"}).status_code == 404
-    assert client.get("/api/v1/data.txt", params={"limit": 1000001}).status_code == 422
-    assert client.get("/api/v1/data.txt", params={"sources": " "}).status_code == 422
+    assert client.get("/api/v1/data", params={"output": "list", "sources": "missing"}).status_code == 404
+    assert client.get("/api/v1/data", params={"output": "list", "limit": 1000001}).status_code == 422
+    assert client.get("/api/v1/data", params={"output": "list", "sources": " "}).status_code == 422
     response = client.get("/api/v1/data", params={"output": "list"})
     assert response.status_code == 200
     assert response.text == ""
