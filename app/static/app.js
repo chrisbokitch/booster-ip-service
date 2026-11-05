@@ -3,6 +3,7 @@ const el = id => document.getElementById(id);
 let page = null, offset = 0, sources = [];
 let selectedSources = null;
 let limitMode = "1000";
+let editingSource = null;
 async function api(url, options) {
   const response = await fetch(url, {cache:"no-store", ...options});
   if (!response.ok) {
@@ -52,7 +53,20 @@ async function loadSources() {
         await loadSources(); offset = 0; await loadData(); message(row.name + " refreshed.");
       } catch (error) { message("Refresh failed: " + error.message); await loadSources(); }
     });
-    card.append(refresh); target.append(card);
+    const edit = node("button", "Edit");
+    edit.type = "button"; edit.addEventListener("click", () => openSourceDialog(row));
+    const remove = node("button", "Remove");
+    remove.type = "button"; remove.addEventListener("click", async () => {
+      if (!confirm("Remove " + row.name + " and its stored snapshot and history?")) return;
+      try {
+        await api("/api/v1/sources/" + encodeURIComponent(row.id), {method:"DELETE"});
+        selectedSources.delete(row.id);
+        await loadSources(); offset = 0; await loadData(); message(row.name + " removed.");
+      } catch (error) { message("Remove failed: " + error.message); }
+    });
+    const actions = node("div", "", "source-actions");
+    actions.append(refresh, edit, remove);
+    card.append(actions); target.append(card);
   }
   if (!rows.length) target.textContent = "No sources configured.";
 }
@@ -103,6 +117,52 @@ for (const button of document.querySelectorAll(".page-preset")) {
 }
 el("limit").addEventListener("change", () => {
   if (limitMode === "custom") { offset = 0; loadData().catch(e => message(e.message)); }
+});
+function openSourceDialog(row = null) {
+  editingSource = row ? row.id : null;
+  el("source-form").reset();
+  el("source-form-title").textContent = row ? "Edit source" : "Add source";
+  el("source-id").disabled = !!row;
+  el("source-id").value = row?.id || "";
+  el("source-name").value = row?.name || "";
+  el("source-url").value = row?.url || "";
+  el("source-format").value = row?.format || "cidr_text";
+  el("source-json-path").value = row?.json_path || "";
+  el("source-enabled").checked = row ? !!row.enabled : true;
+  el("source-form-error").textContent = "";
+  el("source-dialog").showModal();
+}
+el("add-source").addEventListener("click", () => openSourceDialog());
+el("cancel-source").addEventListener("click", () => el("source-dialog").close());
+el("source-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const payload = {
+    name: el("source-name").value.trim(), url: el("source-url").value.trim(),
+    format: el("source-format").value, json_path: el("source-json-path").value.trim() || null,
+    enabled: el("source-enabled").checked
+  };
+  if (!editingSource) payload.id = el("source-id").value.trim();
+  const endpoint = editingSource ? "/api/v1/sources/" + encodeURIComponent(editingSource) : "/api/v1/sources";
+  const save = el("save-source"); save.disabled = true;
+  try {
+    const result = await api(endpoint, {method: editingSource ? "PUT" : "POST",
+      headers: {"Content-Type":"application/json"}, body: JSON.stringify(payload)});
+    el("source-dialog").close();
+    if (!editingSource && payload.enabled) selectedSources.add(payload.id);
+    await loadSources(); offset = 0; await loadData();
+    message(result.snapshot_cleared ? "Source saved. Refresh it to load the new feed." : "Source saved.");
+  } catch (error) { el("source-form-error").textContent = error.message; }
+  finally { save.disabled = false; }
+});
+el("refresh-all").addEventListener("click", async () => {
+  const button = el("refresh-all"); button.disabled = true; button.textContent = "Refreshing…";
+  message("Refreshing all enabled sources…");
+  try {
+    const result = await api("/api/v1/sources/refresh-all", {method:"POST"});
+    await loadSources(); offset = 0; await loadData();
+    message("Refresh complete: " + result.succeeded + " succeeded, " + result.failed + " failed.");
+  } catch (error) { message("Refresh all failed: " + error.message); }
+  finally { button.disabled = false; button.textContent = "Refresh all"; }
 });
 el("reload").addEventListener("click", refreshAll);
 el("select-all").addEventListener("click", () => {
