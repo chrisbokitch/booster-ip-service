@@ -3,6 +3,7 @@ import re
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field, HttpUrl
+from sqlite3 import IntegrityError
 from .core import connect, init_db, refresh_source
 from .processing import source_data_status
 
@@ -15,13 +16,31 @@ async def lifespan(app):
 
 app = FastAPI(title='Booster IP Service', version='0.1.0', lifespan=lifespan)
 
-class SourceInput(BaseModel):
+class SourceConfig(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    url: HttpUrl
+    format: str
+    json_path: str | None = None
+    enabled: bool = True
+
+class SourceInput(SourceConfig):
     id: str = Field(pattern=r'^[a-z][a-z0-9_-]{1,63}$')
     name: str = Field(min_length=1, max_length=100)
     url: HttpUrl
     format: str
     json_path: str | None = None
     enabled: bool = True
+
+def validate_source(source):
+    if source.format not in ('cidr_text', 'ip_text', 'json'):
+        raise HTTPException(422, 'Invalid source format')
+    if source.format == 'json' and not source.json_path:
+        raise HTTPException(422, 'JSON source requires json_path')
+    if source.json_path and not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*', source.json_path):
+        raise HTTPException(422, 'Invalid JSON path')
+    if source.url.scheme != 'https' or source.url.username or source.url.password:
+        raise HTTPException(422, 'HTTPS without credentials is required')
+
 
 @app.get('/api/v1/health')
 def health():
@@ -34,20 +53,58 @@ def sources():
 
 @app.post('/api/v1/sources', status_code=201)
 def create_source(source: SourceInput):
-    if source.format not in ('cidr_text','ip_text','json'):
-        raise HTTPException(422, 'Invalid source format')
-    if source.format == 'json' and not source.json_path:
-        raise HTTPException(422, 'JSON source requires json_path')
-    if source.json_path and not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*', source.json_path):
-        raise HTTPException(422, 'Invalid JSON path')
-    if source.url.scheme != 'https':
-        raise HTTPException(422, 'HTTPS is required')
+    validate_source(source)
     with connect(DB_PATH) as db:
         try:
             db.execute('INSERT INTO sources(id,name,url,format,json_path,enabled) VALUES (?,?,?,?,?,?)', (source.id,source.name,str(source.url),source.format,source.json_path,int(source.enabled)))
-        except __import__('sqlite3').IntegrityError:
+        except IntegrityError:
             raise HTTPException(409,'Source ID already exists')
     return {'id':source.id}
+
+@app.put('/api/v1/sources/{source_id}')
+def update_source(source_id: str, source: SourceConfig):
+    validate_source(source)
+    with connect(DB_PATH) as db:
+        previous = db.execute('SELECT * FROM sources WHERE id=?', (source_id,)).fetchone()
+        if previous is None:
+            raise HTTPException(404, 'Unknown source')
+        changed = (previous['url'] != str(source.url) or previous['format'] != source.format
+                   or previous['json_path'] != source.json_path)
+        db.execute('UPDATE sources SET name=?,url=?,format=?,json_path=?,enabled=?,'
+                   'last_success=CASE WHEN ? THEN NULL ELSE last_success END,'
+                   'last_error=CASE WHEN ? THEN NULL ELSE last_error END WHERE id=?',
+                   (source.name, str(source.url), source.format, source.json_path,
+                    int(source.enabled), changed, changed, source_id))
+        if changed:
+            db.execute('DELETE FROM records WHERE source_id=?', (source_id,))
+    return {'id': source_id, 'snapshot_cleared': changed}
+
+
+@app.delete('/api/v1/sources/{source_id}', status_code=204)
+def delete_source(source_id: str):
+    with connect(DB_PATH) as db:
+        if not db.execute('SELECT 1 FROM sources WHERE id=?', (source_id,)).fetchone():
+            raise HTTPException(404, 'Unknown source')
+        db.execute('INSERT OR IGNORE INTO deleted_sources(id) VALUES (?)', (source_id,))
+        db.execute('DELETE FROM refresh_history WHERE source_id=?', (source_id,))
+        db.execute('DELETE FROM records WHERE source_id=?', (source_id,))
+        db.execute('DELETE FROM sources WHERE id=?', (source_id,))
+
+
+@app.post('/api/v1/sources/refresh-all')
+def refresh_all_sources():
+    with connect(DB_PATH) as db:
+        ids = [row['id'] for row in db.execute('SELECT id FROM sources WHERE enabled=1 ORDER BY id')]
+    results = []
+    for source_id in ids:
+        try:
+            result = refresh_source(DB_PATH, source_id)
+            results.append({'source': source_id, 'success': True, 'count': result['count']})
+        except Exception as exc:
+            results.append({'source': source_id, 'success': False, 'error': str(exc)})
+    return {'results': results, 'succeeded': sum(item['success'] for item in results),
+            'failed': sum(not item['success'] for item in results)}
+
 
 @app.post('/api/v1/sources/{source_id}/refresh')
 def refresh(source_id: str):
