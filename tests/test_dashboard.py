@@ -26,11 +26,15 @@ def test_inline_edit_mode_markup():
     assert home.status_code == 200
     assert 'id="toggle-edit"' in home.text
     assert 'id="add-source" type="button" hidden' in home.text
-    assert 'id="admin-warning" hidden' in home.text
+    assert 'id="edit-warning-dialog"' in home.text
+    assert 'id="confirm-edit-warning"' in home.text
+    assert 'id="cancel-edit-warning"' in home.text
     assert 'id="source-form"' in home.text
     assert 'id="refresh-all"' in home.text
     assert 'id="history-dialog"' in home.text
     assert client.get("/edit").status_code == 404
     js = client.get("/static/app.js").text
-    assert 'setEditMode(!editMode)' in js
+    assert 'el("edit-warning-dialog").showModal()' in js
+    assert 'setEditMode(true)' in js
+    assert 'setEditMode(false)' in js
     assert 'if (editMode) actions.append(remove)' in js
