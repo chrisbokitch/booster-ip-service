@@ -126,7 +126,7 @@ def source_history(source_id: str, limit: int = 50):
         if not db.execute('SELECT 1 FROM sources WHERE id=?', (source_id,)).fetchone():
             raise HTTPException(404, 'Unknown source')
         return [dict(row) for row in db.execute(
-            'SELECT at,success,count,error FROM refresh_history WHERE source_id=? ORDER BY id DESC LIMIT ?',
+            'SELECT at,success,count,error,trigger FROM refresh_history WHERE source_id=? ORDER BY id DESC LIMIT ?',
             (source_id, limit))]
 
 
