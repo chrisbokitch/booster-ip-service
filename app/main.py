@@ -219,3 +219,7 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 @app.get("/", include_in_schema=False)
 def dashboard():
     return FileResponse(STATIC_DIR / "index.html")
+
+@app.get("/edit", include_in_schema=False)
+def edit_dashboard():
+    return FileResponse(STATIC_DIR / "edit.html")
