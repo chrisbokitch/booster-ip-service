@@ -44,3 +44,13 @@ Examples:
 - `/api/v1/data?sources=heybox&format=ip&limit=1000&offset=0`
 
 Output includes `data`, `total` (total records for the requested output format), `count` (returned page size), `sources`, and per-source refresh metadata. Results are sorted by IP version and numeric address, with overlapping/adjacent ranges collapsed. IP output includes all addresses in each range (including IPv4 network and broadcast addresses); pages are generated lazily rather than expanding entire networks. Maximum page size: 10,000. No snapshot means no records, not an automatic fetch.
+
+## Data availability indicators
+
+Both `GET /api/v1/sources` and the `source_status` entries in `GET /api/v1/data` include `data_status`:
+
+- `pending`: no successful ingestion yet (even if a refresh attempt failed).
+- `ready`: a successful snapshot exists and the latest refresh did not fail.
+- `stale`: a successful snapshot exists, but a later refresh failed; cached records remain available.
+
+`GET /api/v1/data` includes `complete`: `true` when **every selected source has a successful snapshot**, including stale snapshots; `false` when at least one selected source is pending. An empty source selection is vacuously complete. `complete` is an availability indicator, **not a freshness guarantee**. Check `data_status` and `last_success` for freshness. Source status is based on the latest recorded refresh result, not an elapsed-time threshold.
