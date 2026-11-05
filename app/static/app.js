@@ -9,12 +9,19 @@ function setEditMode(enabled) {
   editMode = enabled;
   el("toggle-edit").textContent = enabled ? "Cancel" : "Edit";
   el("toggle-edit").setAttribute("aria-pressed", String(enabled));
-  el("admin-warning").hidden = !enabled;
   el("add-source").hidden = !enabled;
   if (!enabled && el("source-dialog").open) el("source-dialog").close();
   loadSources().catch(error => message(error.message));
 }
-el("toggle-edit").addEventListener("click", () => setEditMode(!editMode));
+el("toggle-edit").addEventListener("click", () => {
+  if (editMode) setEditMode(false);
+  else el("edit-warning-dialog").showModal();
+});
+el("confirm-edit-warning").addEventListener("click", () => {
+  el("edit-warning-dialog").close();
+  setEditMode(true);
+});
+el("cancel-edit-warning").addEventListener("click", () => el("edit-warning-dialog").close());
 async function api(url, options) {
   const response = await fetch(url, {cache:"no-store", ...options});
   if (!response.ok) {
