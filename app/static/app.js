@@ -11,6 +11,7 @@ async function api(url, options) {
     try { const body = await response.json(); message = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail); } catch {}
     throw new Error(message || "Request failed");
   }
+  if (response.status === 204) return null;
   return response.json();
 }
 function message(value) { el("message").textContent = value; }
