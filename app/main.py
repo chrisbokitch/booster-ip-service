@@ -154,13 +154,6 @@ def refresh(source_id: str):
     except Exception as exc:
         raise HTTPException(502,f'Refresh failed: {exc}')
 
-@app.get('/api/v1/sources/{source_id}/records')
-def records(source_id: str):
-    with connect(DB_PATH) as db:
-        if not db.execute('SELECT 1 FROM sources WHERE id=?',(source_id,)).fetchone():
-            raise HTTPException(404,'Unknown source')
-        return {'source':source_id,'networks':[r['network'] for r in db.execute('SELECT network FROM records WHERE source_id=? ORDER BY network',(source_id,))]}
-
 from typing import Literal
 from fastapi import Query
 from fastapi.responses import PlainTextResponse, FileResponse
