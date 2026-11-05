@@ -168,37 +168,27 @@ from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 from .processing import get_data
 
-@app.get('/api/v1/data')
+@app.get(
+    '/api/v1/data',
+    responses={200: {'content': {'application/json': {}, 'text/plain': {}}}},
+)
 def data(
     sources: str | None = Query(default=None, description="Comma-separated source IDs; omit for all enabled sources"),
     format: Literal['cidr', 'ip'] = 'cidr',
     family: Literal['all', 'ipv4', 'ipv6'] = 'all',
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=1000, ge=1, le=1000000),
+    output: Literal['json', 'list'] = 'json',
 ):
     selected = None if sources is None else [s.strip() for s in sources.split(',') if s.strip()]
     if sources is not None and not selected:
         raise HTTPException(422, 'Specify at least one source')
     try:
-        return get_data(DB_PATH, selected, family, format, offset, limit)
+        result = get_data(DB_PATH, selected, family, format, offset, limit)
     except KeyError as exc:
         raise HTTPException(404, f'Unknown source: {exc}')
-
-@app.get(
-    '/api/v1/data.txt',
-    response_class=PlainTextResponse,
-    summary='Export normalized addresses as newline-separated text',
-    description='Returns a bounded page of CIDRs or individual IPs, one per line. '
-                'Uses stored snapshots; never triggers a source refresh.',
-)
-def data_text(
-    sources: str | None = Query(default=None, description="Comma-separated source IDs; omit for all enabled sources"),
-    format: Literal['cidr', 'ip'] = 'cidr',
-    family: Literal['all', 'ipv4', 'ipv6'] = 'all',
-    offset: int = Query(default=0, ge=0),
-    limit: int = Query(default=1000, ge=1, le=1000000),
-):
-    result = data(sources=sources, format=format, family=family, offset=offset, limit=limit)
+    if output == 'json':
+        return result
     body = "\n".join(result['data'])
     if body:
         body += "\n"
