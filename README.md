@@ -43,7 +43,7 @@ Examples:
 - `/api/v1/data?sources=uubooster,heybox&format=cidr&family=ipv4`
 - `/api/v1/data?sources=heybox&format=ip&limit=1000&offset=0`
 
-Output includes `data`, `total` (total records for the requested output format), `count` (returned page size), `sources`, and per-source refresh metadata. Results are sorted by IP version and numeric address, with overlapping/adjacent ranges collapsed. IP output includes all addresses in each range (including IPv4 network and broadcast addresses); pages are generated lazily rather than expanding entire networks. Maximum page size: 10,000. No snapshot means no records, not an automatic fetch.
+Output includes `data`, `total` (total records for the requested output format), `count` (returned page size), `sources`, and per-source refresh metadata. Results are sorted by IP version and numeric address, with overlapping/adjacent ranges collapsed. IP output includes all addresses in each range (including IPv4 network and broadcast addresses); pages are generated lazily rather than expanding entire networks. Maximum page size: 1,000,000. No snapshot means no records, not an automatic fetch.
 
 ## Data availability indicators
 
@@ -64,7 +64,7 @@ The service supports two representations of the **same stored data**:
 | `GET /api/v1/data` | `application/json` | Structured consumers and monitoring |
 | `GET /api/v1/data.txt` | `text/plain` | Firewalls, scripts, and tools expecting one entry per line |
 
-Both accept `sources`, `format=cidr|ip`, `family=all|ipv4|ipv6`, `offset`, and `limit`. Pagination is zero-based, with a default limit of 1,000 and maximum of 10,000. The JSON endpoint adds `has_more` and `next_offset` (null at the end). The text endpoint provides `X-Total-Count`, `X-Result-Count`, `X-Data-Complete`, `X-Has-More`, and `X-Next-Offset` response headers (empty when no next page).
+Both accept `sources`, `format=cidr|ip`, `family=all|ipv4|ipv6`, `offset`, and `limit`. Pagination is zero-based, with a default limit of 1,000 and maximum of 1,000,000. The JSON endpoint adds `has_more` and `next_offset` (null at the end). The text endpoint provides `X-Total-Count`, `X-Result-Count`, `X-Data-Complete`, `X-Has-More`, and `X-Next-Offset` response headers (empty when no next page).
 
 Examples:
 
@@ -87,4 +87,8 @@ Copy and download apply **only to the displayed page**. A source refresh fetches
 
 ### Dashboard source and page controls
 
-The combined output has checkboxes for individual enabled sources (all enabled sources selected initially), plus a **Select all enabled** shortcut. Unchecking every source shows an empty selection rather than silently querying all enabled sources. The page size is a custom integer between 1 and 10,000, validated before requesting data. Changing source selection, format, family, or page size returns to the first page. Disabled sources remain visible in source status but cannot be selected in the dashboard.
+The combined output has checkboxes for individual enabled sources (all enabled sources selected initially), plus a **Select all enabled** shortcut. Unchecking every source shows an empty selection rather than silently querying all enabled sources. The page size is a custom integer between 1 and 1,000,000, validated before requesting data. Changing source selection, format, family, or page size returns to the first page. Disabled sources remain visible in source status but cannot be selected in the dashboard.
+
+### Page size presets
+
+The dashboard offers 1,000 (default), 10,000, and Custom buttons. Custom enables an integer field for 1–1,000,000 results. The same upper bound is enforced by the API to avoid unbounded memory and response sizes, especially when expanding CIDRs into individual IP addresses. Large pages may be slow and memory-intensive; pagination remains recommended.
