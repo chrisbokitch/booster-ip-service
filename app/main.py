@@ -67,6 +67,7 @@ def records(source_id: str):
 
 from typing import Literal
 from fastapi import Query
+from fastapi.responses import PlainTextResponse
 from .processing import get_data
 
 @app.get('/api/v1/data')
@@ -84,3 +85,32 @@ def data(
         return get_data(DB_PATH, selected, family, format, offset, limit)
     except KeyError as exc:
         raise HTTPException(404, f'Unknown source: {exc}')
+
+@app.get(
+    '/api/v1/data.txt',
+    response_class=PlainTextResponse,
+    summary='Export normalized addresses as newline-separated text',
+    description='Returns a bounded page of CIDRs or individual IPs, one per line. '
+                'Uses stored snapshots; never triggers a source refresh.',
+)
+def data_text(
+    sources: str | None = Query(default=None, description="Comma-separated source IDs; omit for all enabled sources"),
+    format: Literal['cidr', 'ip'] = 'cidr',
+    family: Literal['all', 'ipv4', 'ipv6'] = 'all',
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=1000, ge=1, le=10000),
+):
+    result = data(sources=sources, format=format, family=family, offset=offset, limit=limit)
+    body = "\\n".join(result['data'])
+    if body:
+        body += "\\n"
+    return PlainTextResponse(
+        body,
+        headers={
+            'X-Total-Count': str(result['total']),
+            'X-Result-Count': str(result['count']),
+            'X-Data-Complete': str(result['complete']).lower(),
+            'X-Has-More': str(result['has_more']).lower(),
+            'X-Next-Offset': str(result['next_offset']) if result['next_offset'] is not None else '',
+        },
+    )
