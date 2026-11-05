@@ -53,3 +53,17 @@ def test_refresh_all_isolates_failures(tmp_path, monkeypatch):
     assert response.json()["succeeded"] == 1
     assert response.json()["failed"] == 1
     assert calls == ["heybox", "uubooster"]
+
+def test_edit_existing_heybox_with_json_path(tmp_path, monkeypatch):
+    path = tmp_path / "service.db"
+    init_db(path)
+    monkeypatch.setattr(main, "DB_PATH", str(path))
+    client = TestClient(main.app)
+    source = next(item for item in client.get("/api/v1/sources").json()
+                  if item["id"] == "heybox")
+    payload = {"name": source["name"], "url": source["url"],
+               "format": source["format"], "json_path": source["json_path"],
+               "enabled": bool(source["enabled"])}
+    response = client.put("/api/v1/sources/heybox", json=payload)
+    assert response.status_code == 200, response.text
+    assert response.json()["snapshot_cleared"] is False
