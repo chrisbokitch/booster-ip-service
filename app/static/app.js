@@ -44,6 +44,7 @@ async function loadSources() {
     card.append(node("h3", row.name), node("p", row.id + " · " + row.record_count + " stored records"));
     card.append(node("p", row.data_status, "status " + row.data_status));
     card.append(node("p", "Last success: " + fmtDate(row.last_success)));
+    if (row.refresh_interval_minutes) card.append(node("p", row.enabled ? "Next refresh: " + fmtDate(row.next_refresh) : "Automatic refresh paused (disabled)"));
     if (row.last_error) card.append(node("p", "Last error: " + row.last_error));
     const refresh = node("button", "Refresh");
     refresh.type = "button"; refresh.disabled = !row.enabled;
@@ -66,7 +67,9 @@ async function loadSources() {
       } catch (error) { message("Remove failed: " + error.message); }
     });
     const actions = node("div", "", "source-actions");
-    actions.append(refresh, edit, remove);
+    const history = node("button", "History");
+    history.type = "button"; history.addEventListener("click", () => showHistory(row));
+    actions.append(refresh, edit, history, remove);
     card.append(actions); target.append(card);
   }
   if (!rows.length) target.textContent = "No sources configured.";
@@ -119,6 +122,32 @@ for (const button of document.querySelectorAll(".page-preset")) {
 el("limit").addEventListener("change", () => {
   if (limitMode === "custom") { offset = 0; loadData().catch(e => message(e.message)); }
 });
+async function showHistory(row) {
+  el("history-title").textContent = row.name + " — Refresh history";
+  el("history-content").textContent = "Loading…";
+  el("history-dialog").showModal();
+  try {
+    const entries = await api("/api/v1/sources/" + encodeURIComponent(row.id) + "/history");
+    const table = document.createElement("table");
+    const head = document.createElement("tr");
+    for (const label of ["Time", "Result", "Records / error"]) head.append(node("th", label));
+    table.append(head);
+    for (const entry of entries) {
+      const tr = document.createElement("tr");
+      tr.append(node("td", fmtDate(entry.at)), node("td", entry.success ? "Success" : "Failed"),
+        node("td", entry.success ? String(entry.count) : (entry.error || "Unknown error")));
+      table.append(tr);
+    }
+    el("history-content").replaceChildren(entries.length ? table : node("p", "No refreshes recorded."));
+  } catch (error) { el("history-content").textContent = error.message; }
+}
+el("close-history").addEventListener("click", () => el("history-dialog").close());
+function updateIntervalInput() {
+  const custom = el("source-interval").value === "custom";
+  el("source-custom-interval-wrap").hidden = !custom;
+  el("source-custom-interval").required = custom;
+}
+el("source-interval").addEventListener("change", updateIntervalInput);
 function openSourceDialog(row = null) {
   editingSource = row ? row.id : null;
   el("source-form").reset();
@@ -130,6 +159,10 @@ function openSourceDialog(row = null) {
   el("source-format").value = row?.format || "cidr_text";
   el("source-json-path").value = row?.json_path || "";
   el("source-enabled").checked = row ? !!row.enabled : true;
+  const interval = row?.refresh_interval_minutes;
+  el("source-interval").value = interval == null ? "" : ([60,360,720,1440].includes(interval) ? String(interval) : "custom");
+  if (interval != null) el("source-custom-interval").value = String(interval);
+  updateIntervalInput();
   el("source-form-error").textContent = "";
   el("source-dialog").showModal();
 }
@@ -140,7 +173,8 @@ el("source-form").addEventListener("submit", async event => {
   const payload = {
     name: el("source-name").value.trim(), url: el("source-url").value.trim(),
     format: el("source-format").value, json_path: el("source-json-path").value.trim() || null,
-    enabled: el("source-enabled").checked
+    enabled: el("source-enabled").checked,
+    refresh_interval_minutes: el("source-interval").value === "" ? null : Number(el("source-interval").value === "custom" ? el("source-custom-interval").value : el("source-interval").value)
   };
   if (!editingSource) payload.id = el("source-id").value.trim();
   const endpoint = editingSource ? "/api/v1/sources/" + encodeURIComponent(editingSource) : "/api/v1/sources";
