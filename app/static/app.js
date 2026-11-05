@@ -2,6 +2,7 @@
 const el = id => document.getElementById(id);
 let page = null, offset = 0, sources = [];
 let selectedSources = null;
+let limitMode = "1000";
 async function api(url, options) {
   const response = await fetch(url, {cache:"no-store", ...options});
   if (!response.ok) {
@@ -57,9 +58,10 @@ async function loadSources() {
 }
 function pageSize() {
   const input = el("limit");
-  const value = Number(input.value);
-  if (!Number.isInteger(value) || value < 1 || value > 10000) {
-    input.setCustomValidity("Enter a whole number from 1 to 10,000.");
+  if (limitMode !== "custom") return Number(limitMode);
+  const value = input.value.trim() === "" ? NaN : Number(input.value);
+  if (!Number.isInteger(value) || value < 1 || value > 1000000) {
+    input.setCustomValidity("Enter a whole number from 1 to 1,000,000.");
     input.reportValidity();
     return null;
   }
@@ -85,7 +87,23 @@ async function loadData() {
   message(page.count ? "Showing " + (offset + 1).toLocaleString() + "–" + (offset + page.count).toLocaleString() + " of " + page.total.toLocaleString() : "No records on this page.");
 }
 async function refreshAll() { try { await loadSources(); await loadData(); } catch (error) { message("Unable to load data: " + error.message); } }
-for (const id of ["format","family","limit"]) el(id).addEventListener("change", () => { offset = 0; loadData().catch(e => message(e.message)); });
+for (const id of ["format","family"]) el(id).addEventListener("change", () => { offset = 0; loadData().catch(e => message(e.message)); });
+for (const button of document.querySelectorAll(".page-preset")) {
+  button.addEventListener("click", () => {
+    limitMode = button.dataset.limit;
+    for (const other of document.querySelectorAll(".page-preset")) {
+      const active = other === button;
+      other.classList.toggle("active", active);
+      other.setAttribute("aria-pressed", String(active));
+    }
+    el("custom-limit-wrap").hidden = limitMode !== "custom";
+    if (limitMode === "custom") el("limit").focus();
+    else { el("limit").setCustomValidity(""); offset = 0; loadData().catch(e => message(e.message)); }
+  });
+}
+el("limit").addEventListener("change", () => {
+  if (limitMode === "custom") { offset = 0; loadData().catch(e => message(e.message)); }
+});
 el("reload").addEventListener("click", refreshAll);
 el("select-all").addEventListener("click", () => {
   selectedSources = new Set(sources.filter(row => row.enabled).map(row => row.id));
