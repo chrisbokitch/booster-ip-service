@@ -16,11 +16,13 @@ def test_completeness_tracks_snapshots_not_errors(tmp_path):
     assert get_data(path)["source_status"]["uubooster"]["data_status"] == "pending"
     with connect(path) as db:
         db.execute("UPDATE sources SET last_success='2026-11-05' WHERE id='heybox'")
+        db.execute("UPDATE sources SET last_success='2026-11-05' WHERE id='local_example'")
         db.execute("UPDATE sources SET last_success='2026-11-05', last_error='timeout' WHERE id='uubooster'")
     result = get_data(path)
     assert result["complete"] is True
     assert result["source_status"]["uubooster"]["data_status"] == "stale"
     assert result["source_status"]["heybox"]["data_status"] == "ready"
+    assert result["source_status"]["local_example"]["data_status"] == "ready"
 
 
 def test_explicit_subset_completeness(tmp_path):
