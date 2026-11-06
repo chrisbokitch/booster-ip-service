@@ -115,7 +115,6 @@ async function api(url, options) {
   return response.json();
 }
 function message(value) { el("message").textContent = value; }
-function sourceMessage(value) { el("source-message").textContent = value; }
 function fmtDate(value) { return value ? new Date(value).toLocaleString() : "Never"; }
 function node(tag, text, className) { const element = document.createElement(tag); element.textContent = text; if (className) element.className = className; return element; }
 async function loadSources() {
@@ -174,9 +173,15 @@ async function loadSources() {
       try {
         await api("/api/v1/sources/" + encodeURIComponent(row.id), {method:"DELETE"});
         selectedSources.delete(row.id);
+        await loadSources(); offset = 0; await loadData();
+        const removed = node("article", "", "source source-removed");
+        removed.append(node("h3", row.name));
+        const removedFooter = node("div", "Source removed.", "source-footer");
+        removedFooter.setAttribute("role", "status");
+        removed.append(removedFooter);
+        el("sources").append(removed);
         sourceNotices.delete(row.id);
-        await loadSources(); offset = 0; await loadData(); sourceMessage(row.name + " removed.");
-      } catch (error) { sourceMessage("Remove failed: " + error.message); }
+      } catch (error) { setSourceNotice(row.id, "Remove failed: " + error.message); }
     });
     const actions = node("div", "", "source-actions");
     const history = node("button", "History");
