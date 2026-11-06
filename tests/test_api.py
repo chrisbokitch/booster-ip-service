@@ -62,3 +62,19 @@ def test_output_parameter_validation(tmp_path, monkeypatch):
     assert client.get("/api/v1/data", params={"output": "csv"}).status_code == 422
     assert client.get("/api/v1/data").headers["content-type"].startswith("application/json")
     assert "/api/v1/data.txt" not in {route.path for route in main.app.routes}
+
+
+def test_swagger_source_examples_are_valid_and_formats_are_enumerated():
+    client = TestClient(main.app)
+    schema = client.get("/openapi.json").json()
+    models = schema["components"]["schemas"]
+    for model_name in ("SourceInput", "SourceConfig"):
+        model = models[model_name]
+        example = model["example"]
+        assert example["format"] == "cidr_text"
+        assert example["json_path"] is None
+        assert example["url"].startswith("https://")
+        assert example["refresh_interval_minutes"] == 1440
+        assert model["properties"]["format"]["enum"] == ["cidr_text", "ip_text", "json"]
+    assert models["SourceInput"]["example"]["id"] == "example_feed"
+    assert client.post("/api/v1/sources", json={**models["SourceInput"]["example"], "format": "string"}).status_code == 422
