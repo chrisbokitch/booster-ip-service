@@ -182,10 +182,10 @@ for (const field of formatterFields) {
 }
 async function refreshAll() { try { await loadSources(); await loadData(); } catch (error) { message("Unable to load data: " + error.message); } }
 for (const id of ["format","family"]) el(id).addEventListener("change", () => { offset = 0; loadData().catch(e => message(e.message)); });
-for (const button of document.querySelectorAll(".page-preset")) {
+for (const button of document.querySelectorAll(".page-size-control .page-preset")) {
   button.addEventListener("click", () => {
     limitMode = button.dataset.limit;
-    for (const other of document.querySelectorAll(".page-preset")) {
+    for (const other of document.querySelectorAll(".page-size-control .page-preset")) {
       const active = other === button;
       other.classList.toggle("active", active);
       other.setAttribute("aria-pressed", String(active));
