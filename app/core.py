@@ -51,6 +51,10 @@ def init_db(path):
             db.execute("ALTER TABLE sources ADD COLUMN refresh_interval_minutes INTEGER")
         if "next_refresh" not in columns:
             db.execute("ALTER TABLE sources ADD COLUMN next_refresh TEXT")
+        if "file_path" not in columns:
+            db.execute("ALTER TABLE sources ADD COLUMN file_path TEXT")
+        if "cntry_origin" not in columns:
+            db.execute("ALTER TABLE sources ADD COLUMN cntry_origin TEXT")
     from .config import load_source_config
     sync_source_config(path, load_source_config())
 
@@ -70,9 +74,10 @@ def sync_source_config(path, definitions):
             source_id = source.id
             configured_ids.add(source_id)
             previous = existing.get(source_id)
-            url = str(source.url)
+            url = str(source.url) if source.url is not None else ""
+            file_path = source.file_path
             changed = previous is not None and (
-                previous["url"] != url or previous["format"] != source.format
+                previous["url"] != url or previous["file_path"] != file_path or previous["format"] != source.format
                 or previous["json_path"] != source.json_path
             )
             interval = source.refresh_interval_minutes
@@ -84,15 +89,15 @@ def sync_source_config(path, definitions):
                 next_refresh = previous["next_refresh"]
             if previous is None:
                 db.execute(
-                    "INSERT INTO sources(id,name,url,format,json_path,enabled,refresh_interval_minutes,next_refresh) VALUES (?,?,?,?,?,?,?,?)",
-                    (source_id, source.name, url, source.format, source.json_path, int(source.enabled), interval, next_refresh),
+                    "INSERT INTO sources(id,name,url,file_path,cntry_origin,format,json_path,enabled,refresh_interval_minutes,next_refresh) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    (source_id, source.name, url, file_path, source.cntry_origin, source.format, source.json_path, int(source.enabled), interval, next_refresh),
                 )
             else:
                 db.execute(
-                    "UPDATE sources SET name=?,url=?,format=?,json_path=?,enabled=?,refresh_interval_minutes=?,next_refresh=?,"
+                    "UPDATE sources SET name=?,url=?,file_path=?,cntry_origin=?,format=?,json_path=?,enabled=?,refresh_interval_minutes=?,next_refresh=?,"
                     "last_success=CASE WHEN ? THEN NULL ELSE last_success END,"
                     "last_error=CASE WHEN ? THEN NULL ELSE last_error END WHERE id=?",
-                    (source.name, url, source.format, source.json_path, int(source.enabled), interval, next_refresh, changed, changed, source_id),
+                    (source.name, url, file_path, source.cntry_origin, source.format, source.json_path, int(source.enabled), interval, next_refresh, changed, changed, source_id),
                 )
                 if changed:
                     db.execute("DELETE FROM records WHERE source_id=?", (source_id,))
@@ -144,22 +149,33 @@ def _refresh_source(path, source_id, *, client=None, trigger="manual", owner=Non
         if not row['enabled']:
             raise ValueError("Source is disabled")
         try:
-            parts = urlsplit(row['url'])
-            if parts.scheme != 'https' or not parts.hostname or parts.username or parts.password:
-                raise ValueError("Source URL must be HTTPS without credentials")
-            import socket
-            addresses = socket.getaddrinfo(parts.hostname, parts.port or 443, type=socket.SOCK_STREAM)
-            if not addresses or any(not ipaddress.ip_address(a[4][0]).is_global for a in addresses):
-                raise ValueError("Source host must resolve exclusively to public IP addresses")
-            if client is None:
-                with httpx.Client(timeout=20, follow_redirects=False) as session:
-                    response = session.get(row['url'])
+            if row["file_path"]:
+                local_file = Path(row["file_path"])
+                if local_file.stat().st_size > 10_000_000:
+                    raise ValueError("Feed exceeds 10 MB")
+                with local_file.open("rb") as stream:
+                    payload = stream.read(10_000_001)
+                if len(payload) > 10_000_000:
+                    raise ValueError("Feed exceeds 10 MB")
+                raw = payload.decode("utf-8-sig")
             else:
-                response = client.get(row['url'])
-            response.raise_for_status()
-            if len(response.content) > 10_000_000:
-                raise ValueError("Feed exceeds 10 MB")
-            networks = parse_feed(response.text, row['format'], row['json_path'])
+                parts = urlsplit(row['url'])
+                if parts.scheme != 'https' or not parts.hostname or parts.username or parts.password:
+                    raise ValueError("Source URL must be HTTPS without credentials")
+                import socket
+                addresses = socket.getaddrinfo(parts.hostname, parts.port or 443, type=socket.SOCK_STREAM)
+                if not addresses or any(not ipaddress.ip_address(a[4][0]).is_global for a in addresses):
+                    raise ValueError("Source host must resolve exclusively to public IP addresses")
+                if client is None:
+                    with httpx.Client(timeout=20, follow_redirects=False) as session:
+                        response = session.get(row['url'])
+                else:
+                    response = client.get(row['url'])
+                response.raise_for_status()
+                if len(response.content) > 10_000_000:
+                    raise ValueError("Feed exceeds 10 MB")
+                raw = response.text
+            networks = parse_feed(raw, row['format'], row['json_path'])
             if owner is not None:
                 _verify_lease(db, source_id, owner)
             db.execute("DELETE FROM records WHERE source_id=?", (source_id,))
