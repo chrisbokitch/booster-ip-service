@@ -101,3 +101,14 @@ def test_named_custom_output_formats_are_browser_local():
     assert 'outputMode = "saved"' in js
     assert 'el("output-template-wrap").hidden = outputMode !== "custom"' in js
     assert 'selectedSavedFormat' in js
+
+
+def test_saved_output_formats_can_be_removed_and_custom_is_last():
+    client = TestClient(main.app)
+    html = client.get("/").text
+    js = client.get("/static/app.js").text
+    assert html.index('id="output-list"') < html.index('id="saved-output-buttons"') < html.index('id="output-custom"')
+    assert 'className = "saved-format-remove"' in js
+    assert 'delete updated[name]' in js
+    assert 'localStorage.setItem(savedFormatsKey, JSON.stringify(updated))' in js
+    assert 'outputMode = "list"' in js
