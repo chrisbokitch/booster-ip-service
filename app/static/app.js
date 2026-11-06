@@ -183,25 +183,6 @@ function setSourceNotice(id, value) {
   const footer = [...document.querySelectorAll(".source-footer")].find(item => item.dataset.sourceId === id);
   if (footer) footer.textContent = value;
 }
-let editingSource = null;
-let editMode = false;
-function setEditMode(enabled) {
-  editMode = enabled;
-  el("toggle-edit").textContent = enabled ? "Cancel" : "Edit";
-  el("toggle-edit").setAttribute("aria-pressed", String(enabled));
-  el("add-source").hidden = !enabled;
-  if (!enabled && el("source-dialog").open) el("source-dialog").close();
-  loadSources().catch(error => message(error.message));
-}
-el("toggle-edit").addEventListener("click", () => {
-  if (editMode) setEditMode(false);
-  else el("edit-warning-dialog").showModal();
-});
-el("confirm-edit-warning").addEventListener("click", () => {
-  el("edit-warning-dialog").close();
-  setEditMode(true);
-});
-el("cancel-edit-warning").addEventListener("click", () => el("edit-warning-dialog").close());
 async function api(url, options) {
   const response = await fetch(url, {cache:"no-store", ...options});
   if (!response.ok) {
@@ -263,31 +244,11 @@ async function loadSources() {
         await loadSources();
       }
     });
-    const edit = node("button", "Edit");
-    edit.type = "button"; edit.addEventListener("click", () => openSourceDialog(row));
-    const remove = node("button", "Remove");
-    remove.type = "button"; remove.addEventListener("click", async () => {
-      if (!confirm("Remove " + row.name + " and its stored snapshot and history?")) return;
-      try {
-        await api("/api/v1/sources/" + encodeURIComponent(row.id), {method:"DELETE"});
-        selectedSources.delete(row.id);
-        await loadSources(); offset = 0; await loadData();
-        const removed = node("article", "", "source source-removed");
-        removed.append(node("h3", row.name));
-        const removedFooter = node("div", "Source removed.", "source-footer");
-        removedFooter.setAttribute("role", "status");
-        removed.append(removedFooter);
-        el("sources").append(removed);
-        sourceNotices.delete(row.id);
-      } catch (error) { setSourceNotice(row.id, "Remove failed: " + error.message); }
-    });
     const actions = node("div", "", "source-actions");
     const history = node("button", "History");
     history.type = "button"; history.addEventListener("click", () => showHistory(row));
     actions.append(refresh);
-    if (editMode) actions.append(edit);
     actions.append(history);
-    if (editMode) actions.append(remove);
     card.append(actions);
     const footer = node("div", sourceNotices.get(row.id) || "", "source-footer");
     footer.dataset.sourceId = row.id;
@@ -412,53 +373,6 @@ async function showHistory(row) {
   } catch (error) { el("history-content").textContent = error.message; }
 }
 el("close-history").addEventListener("click", () => el("history-dialog").close());
-function updateIntervalInput() {
-  const custom = el("source-interval").value === "custom";
-  el("source-custom-interval-wrap").hidden = !custom;
-  el("source-custom-interval").required = custom;
-}
-el("source-interval").addEventListener("change", updateIntervalInput);
-function openSourceDialog(row = null) {
-  editingSource = row ? row.id : null;
-  el("source-form").reset();
-  el("source-form-title").textContent = row ? "Edit source" : "Add source";
-  el("source-id").disabled = !!row;
-  el("source-id").value = row?.id || "";
-  el("source-name").value = row?.name || "";
-  el("source-url").value = row?.url || "";
-  el("source-format").value = row?.format || "cidr_text";
-  el("source-json-path").value = row?.json_path || "";
-  el("source-enabled").checked = row ? !!row.enabled : true;
-  const interval = row?.refresh_interval_minutes;
-  el("source-interval").value = interval == null ? "" : ([60,360,720,1440].includes(interval) ? String(interval) : "custom");
-  if (interval != null) el("source-custom-interval").value = String(interval);
-  updateIntervalInput();
-  el("source-form-error").textContent = "";
-  el("source-dialog").showModal();
-}
-el("add-source").addEventListener("click", () => openSourceDialog());
-el("cancel-source").addEventListener("click", () => el("source-dialog").close());
-el("source-form").addEventListener("submit", async event => {
-  event.preventDefault();
-  const payload = {
-    name: el("source-name").value.trim(), url: el("source-url").value.trim(),
-    format: el("source-format").value, json_path: el("source-json-path").value.trim() || null,
-    enabled: el("source-enabled").checked,
-    refresh_interval_minutes: el("source-interval").value === "" ? null : Number(el("source-interval").value === "custom" ? el("source-custom-interval").value : el("source-interval").value)
-  };
-  if (!editingSource) payload.id = el("source-id").value.trim();
-  const endpoint = editingSource ? "/api/v1/sources/" + encodeURIComponent(editingSource) : "/api/v1/sources";
-  const save = el("save-source"); save.disabled = true;
-  try {
-    const result = await api(endpoint, {method: editingSource ? "PUT" : "POST",
-      headers: {"Content-Type":"application/json"}, body: JSON.stringify(payload)});
-    el("source-dialog").close();
-    if (!editingSource && payload.enabled) selectedSources.add(payload.id);
-    await loadSources(); offset = 0; await loadData();
-    setSourceNotice(editingSource || payload.id, result.snapshot_cleared ? "Source saved. Refresh to load the new feed." : "Source saved.");
-  } catch (error) { el("source-form-error").textContent = error.message; }
-  finally { save.disabled = false; }
-});
 el("refresh-all").addEventListener("click", async () => {
   const button = el("refresh-all"); button.disabled = true; button.textContent = "Refreshing…";
   message("Refreshing all enabled sources…");
