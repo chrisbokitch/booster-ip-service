@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field, HttpUrl
 from sqlite3 import IntegrityError
 from .core import connect, init_db, refresh_source, refresh_due_sources
-from .processing import source_data_status
+from .processing import source_data_status, aggregate
 
 DB_PATH = os.environ.get('BOOSTER_DB', 'data/booster.sqlite3')
 
@@ -70,7 +70,13 @@ def health():
 @app.get('/api/v1/sources')
 def sources():
     with connect(DB_PATH) as db:
-        return [{**dict(row), 'data_status': source_data_status(row)} for row in db.execute('SELECT s.*, (SELECT COUNT(*) FROM records r WHERE r.source_id=s.id) AS record_count FROM sources s ORDER BY id')]
+        rows = db.execute('SELECT s.*, (SELECT COUNT(*) FROM records r WHERE r.source_id=s.id) AS record_count FROM sources s ORDER BY id').fetchall()
+        result = []
+        for row in rows:
+            networks = [item['network'] for item in db.execute('SELECT network FROM records WHERE source_id=?', (row['id'],))]
+            result.append({**dict(row), 'data_status': source_data_status(row),
+                           'cidr_count': len(aggregate(networks))})
+        return result
 
 @app.post('/api/v1/sources', status_code=201)
 def create_source(source: SourceInput):
