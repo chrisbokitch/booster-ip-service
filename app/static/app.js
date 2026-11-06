@@ -6,16 +6,71 @@ let limitMode = "1000";
 let outputMode = "list";
 const formatterKey = "booster-ip-service.custom-output.v1";
 const formatterFields = ["header", "entry", "separator", "footer"];
+const savedFormatsKey = "booster-ip-service.saved-output-formats.v1";
+let savedFormats = {};
+let selectedSavedFormat = null;
+function currentFormatter() {
+  return Object.fromEntries(formatterFields.map(field => [field, el("output-" + field).value]));
+}
+function validFormatter(value) {
+  return value && typeof value === "object" && formatterFields.every(field => typeof value[field] === "string");
+}
+function restoreSavedFormats() {
+  try {
+    const data = JSON.parse(localStorage.getItem(savedFormatsKey) || "{}");
+    if (!data || typeof data !== "object" || Array.isArray(data)) return;
+    for (const [name, template] of Object.entries(data)) {
+      if (name.trim() && name.length <= 60 && validFormatter(template)) savedFormats[name] = template;
+    }
+  } catch (_) { /* Invalid or unavailable local storage. */ }
+}
+function activeFormatter() {
+  return outputMode === "saved" && selectedSavedFormat && savedFormats[selectedSavedFormat]
+    ? savedFormats[selectedSavedFormat] : currentFormatter();
+}
+function updateOutputMode() {
+  for (const mode of ["list", "custom"]) {
+    const active = outputMode === mode;
+    el("output-" + mode).classList.toggle("active", active);
+    el("output-" + mode).setAttribute("aria-pressed", String(active));
+  }
+  el("output-template-wrap").hidden = outputMode !== "custom";
+  renderSavedFormatButtons();
+}
+function renderSavedFormatButtons() {
+  const target = el("saved-output-buttons");
+  target.replaceChildren();
+  for (const name of Object.keys(savedFormats)) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = name;
+    const active = outputMode === "saved" && selectedSavedFormat === name;
+    button.className = "page-preset" + (active ? " active" : "");
+    button.setAttribute("aria-pressed", String(active));
+    button.addEventListener("click", () => {
+      selectedSavedFormat = name;
+      outputMode = "saved";
+      for (const field of formatterFields) el("output-" + field).value = field === "entry" ? "{value}" : field === "separator" ? "\\n" : "";
+      saveFormatter();
+      updateOutputMode();
+      saveOutputSettings();
+      renderOutput();
+    });
+    target.append(button);
+  }
+}
+
 function decodeEscapes(value) {
   return value.replace(/\\(n|t|\\)/g, (_, code) =>
     code === "n" ? "\n" : code === "t" ? "\t" : "\\");
 }
 function formatOutput(values) {
   if (outputMode === "list") return values.join("\n");
-  const header = decodeEscapes(el("output-header").value);
-  const entry = decodeEscapes(el("output-entry").value);
-  const separator = decodeEscapes(el("output-separator").value);
-  const footer = decodeEscapes(el("output-footer").value);
+  const template = activeFormatter();
+  const header = decodeEscapes(template.header);
+  const entry = decodeEscapes(template.entry);
+  const separator = decodeEscapes(template.separator);
+  const footer = decodeEscapes(template.footer);
   return header + values.map(value => entry.replaceAll("{value}", value)).join(separator) + footer;
 }
 function renderOutput() {
@@ -47,7 +102,8 @@ function saveOutputSettings() {
       family: el("family").value,
       limitMode,
       limit: el("limit").value,
-      outputMode
+      outputMode,
+      selectedSavedFormat
     }));
   } catch (_) { /* Local storage may be unavailable. */ }
 }
@@ -64,6 +120,10 @@ function restoreOutputSettings() {
         && Number(settings.limit) >= 1 && Number(settings.limit) <= 1000000)
       el("limit").value = settings.limit;
     if (["list", "custom"].includes(settings.outputMode)) outputMode = settings.outputMode;
+    if (settings.outputMode === "saved" && typeof settings.selectedSavedFormat === "string" && savedFormats[settings.selectedSavedFormat]) {
+      outputMode = "saved";
+      selectedSavedFormat = settings.selectedSavedFormat;
+    }
   } catch (_) { /* Ignore corrupt or unavailable storage. */ }
   for (const button of document.querySelectorAll(".page-size-control .page-preset")) {
     const active = button.dataset.limit === limitMode;
@@ -71,12 +131,7 @@ function restoreOutputSettings() {
     button.setAttribute("aria-pressed", String(active));
   }
   el("custom-limit-wrap").hidden = limitMode !== "custom";
-  for (const mode of ["list", "custom"]) {
-    const active = mode === outputMode;
-    el("output-" + mode).classList.toggle("active", active);
-    el("output-" + mode).setAttribute("aria-pressed", String(active));
-  }
-  el("output-template-wrap").hidden = outputMode !== "custom";
+  updateOutputMode();
 }
 
 const sourceNotices = new Map();
@@ -232,16 +287,45 @@ async function loadData() {
 for (const mode of ["list", "custom"]) {
   el("output-" + mode).addEventListener("click", () => {
     outputMode = mode;
-    for (const option of ["list", "custom"]) {
-      const active = option === mode;
-      el("output-" + option).classList.toggle("active", active);
-      el("output-" + option).setAttribute("aria-pressed", String(active));
-    }
-    el("output-template-wrap").hidden = mode !== "custom";
+    selectedSavedFormat = null;
+    updateOutputMode();
     saveOutputSettings();
     renderOutput();
   });
 }
+restoreSavedFormats();
+el("save-output-format").addEventListener("click", () => {
+  el("save-format-form").reset();
+  el("save-format-error").textContent = "";
+  el("save-format-dialog").showModal();
+  el("saved-format-name").focus();
+});
+el("cancel-save-format").addEventListener("click", () => el("save-format-dialog").close());
+el("save-format-form").addEventListener("submit", event => {
+  event.preventDefault();
+  const name = el("saved-format-name").value.trim();
+  if (!name) { el("save-format-error").textContent = "Enter a format name."; return; }
+  if (Object.keys(savedFormats).some(existing => existing.toLowerCase() === name.toLowerCase())) {
+    el("save-format-error").textContent = "A format with that name already exists.";
+    return;
+  }
+  const updated = {...savedFormats, [name]: currentFormatter()};
+  try {
+    localStorage.setItem(savedFormatsKey, JSON.stringify(updated));
+  } catch (_) {
+    el("save-format-error").textContent = "Unable to save in this browser. Check storage settings.";
+    return;
+  }
+  savedFormats = updated;
+  el("save-format-dialog").close();
+  selectedSavedFormat = name;
+  outputMode = "saved";
+  for (const field of formatterFields) el("output-" + field).value = field === "entry" ? "{value}" : field === "separator" ? "\\n" : "";
+  saveFormatter();
+  updateOutputMode();
+  saveOutputSettings();
+  renderOutput();
+});
 restoreFormatter();
 for (const field of formatterFields) {
   el("output-" + field).addEventListener("input", () => { saveFormatter(); renderOutput(); });
