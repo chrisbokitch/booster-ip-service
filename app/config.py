@@ -15,7 +15,9 @@ class SourceDefinition(BaseModel):
 
     id: str = Field(pattern=r"^[a-z][a-z0-9_-]{1,63}$")
     name: str = Field(min_length=1, max_length=100)
-    url: HttpUrl
+    url: HttpUrl | None = None
+    file_path: str | None = None
+    cntry_origin: str | None = Field(default=None, pattern=r"^[A-Z]{2}$")
     format: Literal["cidr_text", "ip_text", "json"]
     json_path: str | None = None
     enabled: bool = True
@@ -23,8 +25,12 @@ class SourceDefinition(BaseModel):
 
     @model_validator(mode="after")
     def validate_feed(self):
-        if self.url.scheme != "https" or self.url.username or self.url.password:
+        if (self.url is None) == (self.file_path is None):
+            raise ValueError("Exactly one of url or file_path is required")
+        if self.url is not None and (self.url.scheme != "https" or self.url.username or self.url.password):
             raise ValueError("Source URL must use HTTPS without credentials")
+        if self.file_path is not None and (not self.file_path.strip() or "\\x00" in self.file_path):
+            raise ValueError("Invalid local file path")
         if self.format == "json" and not self.json_path:
             raise ValueError("JSON feeds require json_path")
         if self.json_path and not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*", self.json_path):
@@ -43,4 +49,8 @@ def load_source_config(path=None):
     ids = [source.id for source in config.sources]
     if len(ids) != len(set(ids)):
         raise ValueError("Duplicate source IDs in " + str(path))
+    for source in config.sources:
+        if source.file_path is not None:
+            # Relative paths are interpreted relative to sources.json, not the process CWD.
+            source.file_path = str((path.parent / source.file_path).resolve())
     return config.sources
