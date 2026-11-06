@@ -41,4 +41,6 @@ input[type=number]{background:#303a49;color:#edf3fa;border:1px solid #4a586c;bor
 /* Fixed-height status footer prevents source card reflow during refresh. */
 .source{display:flex;flex-direction:column;padding:16px 16px 0;overflow:hidden}
 .source-actions{margin-top:auto;padding-top:12px;padding-bottom:12px}
-.source-footer{margin:0 -16px;background:#1b2029;border-top:1px solid #394250;padding:10px 16px;height:56px;flex:none;font-size:12px;line-height:18px;color:#b8c4d2;overflow-y:auto;overflow-wrap:anywhere}
+.source-footer{margin:0 -16px;background:#1b2029;border-top:1px solid #394250;padding:5px 12px;height:30px;flex:none;font-size:11px;line-height:18px;color:#b8c4d2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.source-removed{min-height:0;opacity:.75}.source-removed h3{margin:0 0 12px}
