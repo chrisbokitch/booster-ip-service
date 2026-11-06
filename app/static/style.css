@@ -57,3 +57,11 @@ input[type=number]{background:#303a49;color:#edf3fa;border:1px solid #4a586c;bor
 #saved-format-name{width:100%;background:#303a49;color:#fff;border:1px solid #4a586c;border-radius:6px;padding:9px}
 #save-format-form .actions{justify-content:flex-end;margin:0}
 #save-format-error{color:#f4b0a9!important}
+
+/* Keep List, saved formats, and Custom in one ordered button grid. */
+.output-format-buttons{grid-template-columns:repeat(2,minmax(0,1fr))}
+.saved-output-buttons{display:contents}
+.saved-format-item{display:flex;min-width:0;position:relative}
+.saved-format-item>.page-preset{width:100%;padding-right:25px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.saved-format-item>.saved-format-remove{position:absolute;right:3px;top:50%;transform:translateY(-50%);border:0;background:transparent;color:#aebbc9;padding:2px 5px;font-size:15px;line-height:1;border-radius:4px}
+.saved-format-item>.saved-format-remove:hover:not(:disabled){background:#4b3540;color:#fff}
