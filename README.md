@@ -87,7 +87,7 @@ The current configuration includes **uuBooster** and **HEYBOX**, both with `cntr
 
 ## Security and scope
 
-The development server binds to localhost and has no authentication. Deploy only behind EA's internal network restrictions and an HTTPS reverse proxy. Source URLs must be HTTPS and resolve to public addresses; redirects are disabled. Fetches have a timeout and a 10 MB response-size check (currently after download). Apply outbound egress restrictions and streaming download limits before exposing source configuration to untrusted operators.
+The development server binds to localhost and has no authentication. Deploy only behind the organization's network access restrictions and an HTTPS reverse proxy. Source URLs must be HTTPS and resolve to public addresses; redirects are disabled. Fetches have a timeout and a 10 MB response-size check (currently after download). Apply outbound egress restrictions and streaming download limits before exposing source configuration to untrusted operators.
 
 ## Data API
 
