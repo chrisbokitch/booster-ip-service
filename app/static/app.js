@@ -109,6 +109,7 @@ async function api(url, options) {
   return response.json();
 }
 function message(value) { el("message").textContent = value; }
+function sourceMessage(value) { el("source-message").textContent = value; }
 function fmtDate(value) { return value ? new Date(value).toLocaleString() : "Never"; }
 function node(tag, text, className) { const element = document.createElement(tag); element.textContent = text; if (className) element.className = className; return element; }
 async function loadSources() {
@@ -166,8 +167,8 @@ async function loadSources() {
       try {
         await api("/api/v1/sources/" + encodeURIComponent(row.id), {method:"DELETE"});
         selectedSources.delete(row.id);
-        await loadSources(); offset = 0; await loadData(); message(row.name + " removed.");
-      } catch (error) { message("Remove failed: " + error.message); }
+        await loadSources(); offset = 0; await loadData(); sourceMessage(row.name + " removed.");
+      } catch (error) { sourceMessage("Remove failed: " + error.message); }
     });
     const actions = node("div", "", "source-actions");
     const history = node("button", "History");
@@ -309,7 +310,7 @@ el("source-form").addEventListener("submit", async event => {
     el("source-dialog").close();
     if (!editingSource && payload.enabled) selectedSources.add(payload.id);
     await loadSources(); offset = 0; await loadData();
-    message(result.snapshot_cleared ? "Source saved. Refresh it to load the new feed." : "Source saved.");
+    sourceMessage(result.snapshot_cleared ? "Source saved. Refresh it to load the new feed." : "Source saved.");
   } catch (error) { el("source-form-error").textContent = error.message; }
   finally { save.disabled = false; }
 });
