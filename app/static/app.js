@@ -138,7 +138,9 @@ async function loadSources() {
     const card = node("article", "", "source");
     const heading = node("div", "", "source-heading");
     heading.append(node("h3", row.name), node("span", row.data_status, "status " + row.data_status));
-    card.append(heading, node("p", row.record_count.toLocaleString() + " stored CIDR blocks"));
+    const inputType = row.format === "cidr_text" ? "CIDR blocks" : "IPs";
+    card.append(heading, node("p", row.record_count.toLocaleString() + " stored " + inputType));
+    card.append(node("p", row.cidr_count.toLocaleString() + " aggregated CIDR blocks"));
     card.append(node("p", "Last success: " + fmtDate(row.last_success)));
     if (row.refresh_interval_minutes) card.append(node("p", row.enabled ? "Next refresh: " + fmtDate(row.next_refresh) : "Automatic refresh paused (disabled)"));
     if (row.last_error) card.append(node("p", "Last error: " + row.last_error));
