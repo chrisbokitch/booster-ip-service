@@ -44,3 +44,16 @@ input[type=number]{background:#303a49;color:#edf3fa;border:1px solid #4a586c;bor
 .source-footer{margin:0 -16px;background:#1b2029;border-top:1px solid #394250;padding:5px 12px;height:30px;flex:none;font-size:11px;line-height:18px;color:#b8c4d2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 .source-removed{min-height:0;opacity:.75}.source-removed h3{margin:0 0 12px}
+
+/* Named output presets and their local-only save dialog. */
+.saved-output-buttons{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}
+.saved-output-buttons:empty{display:none}
+.saved-output-buttons button{overflow-wrap:anywhere}
+#save-output-format{font-size:12px;align-self:flex-start}
+#save-format-form{display:flex;flex-direction:column;gap:12px}
+#save-format-form h2{margin:0}
+#save-format-form p{margin:0;font-size:13px;line-height:1.5;color:#b8c4d2}
+#save-format-form label{font-size:13px;color:#b8c4d2}
+#saved-format-name{width:100%;background:#303a49;color:#fff;border:1px solid #4a586c;border-radius:6px;padding:9px}
+#save-format-form .actions{justify-content:flex-end;margin:0}
+#save-format-error{color:#f4b0a9!important}
