@@ -76,3 +76,15 @@ def test_source_management_feedback_has_separate_status_area():
     assert 'sourceMessage(result.snapshot_cleared ?' in js
     assert 'sourceMessage(row.name + " removed.")' in js
     assert 'sourceMessage("Remove failed: " + error.message)' in js
+
+
+def test_source_refresh_feedback_uses_card_footer():
+    client = TestClient(main.app)
+    js = client.get("/static/app.js").text
+    css = client.get("/static/style.css").text
+    assert 'setSourceNotice(row.id, "Refreshing…")' in js
+    assert 'setSourceNotice(row.id, "Refresh complete.")' in js
+    assert 'sourceNotices.get(row.id)' in js
+    assert '"source-footer"' in js
+    assert '.source-footer{' in css
+    assert 'height:56px' in css
