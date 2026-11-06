@@ -1,5 +1,7 @@
 "use strict";
 const el = id => document.getElementById(id);
+el("open-about").addEventListener("click", () => el("about-dialog").showModal());
+el("close-about").addEventListener("click", () => el("about-dialog").close());
 let page = null, offset = 0, sources = [];
 let selectedSources = null;
 let limitMode = "1000";
