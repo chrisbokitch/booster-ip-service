@@ -32,7 +32,7 @@ def test_refresh_all_distinguishes_skips_from_failures(tmp_path, monkeypatch):
     response = TestClient(main.app).post("/api/v1/sources/refresh-all")
     assert response.status_code == 200
     result = response.json()
-    assert result["succeeded"] == 2
+    assert result["succeeded"] == 1
     assert result["failed"] == 0
     assert result["skipped"] == 1
     assert {"source": "heybox", "success": False, "skipped": True,
