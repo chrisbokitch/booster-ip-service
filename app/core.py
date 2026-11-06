@@ -51,6 +51,8 @@ def init_db(path):
             db.execute("ALTER TABLE sources ADD COLUMN refresh_interval_minutes INTEGER")
         if "next_refresh" not in columns:
             db.execute("ALTER TABLE sources ADD COLUMN next_refresh TEXT")
+    from .config import load_source_config
+    sync_source_config(path, load_source_config())
 
 
 
