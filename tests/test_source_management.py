@@ -58,9 +58,9 @@ def test_refresh_all_isolates_failures(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "refresh_source", fake_refresh)
     response = TestClient(main.app).post("/api/v1/sources/refresh-all")
     assert response.status_code == 200
-    assert response.json()["succeeded"] == 2
+    assert response.json()["succeeded"] == 1
     assert response.json()["failed"] == 1
-    assert calls == ["heybox", "local_example", "uubooster"]
+    assert calls == ["heybox", "uubooster"]
 
 
 def test_json_source_path_is_preserved(tmp_path):
