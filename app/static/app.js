@@ -41,6 +41,8 @@ function renderSavedFormatButtons() {
   const target = el("saved-output-buttons");
   target.replaceChildren();
   for (const name of Object.keys(savedFormats)) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "saved-format-item";
     const button = document.createElement("button");
     button.type = "button";
     button.textContent = name;
@@ -56,7 +58,32 @@ function renderSavedFormatButtons() {
       saveOutputSettings();
       renderOutput();
     });
-    target.append(button);
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "saved-format-remove";
+    remove.textContent = "×";
+    remove.setAttribute("aria-label", "Remove saved format " + name);
+    remove.title = "Remove " + name;
+    remove.addEventListener("click", () => {
+      const updated = {...savedFormats};
+      delete updated[name];
+      try {
+        localStorage.setItem(savedFormatsKey, JSON.stringify(updated));
+      } catch (_) {
+        window.alert("Unable to remove the saved format from browser storage.");
+        return;
+      }
+      savedFormats = updated;
+      if (selectedSavedFormat === name) {
+        selectedSavedFormat = null;
+        outputMode = "list";
+      }
+      updateOutputMode();
+      saveOutputSettings();
+      renderOutput();
+    });
+    wrapper.append(button, remove);
+    target.append(wrapper);
   }
 }
 
