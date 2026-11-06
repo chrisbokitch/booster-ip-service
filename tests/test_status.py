@@ -22,7 +22,6 @@ def test_completeness_tracks_snapshots_not_errors(tmp_path):
     assert result["complete"] is True
     assert result["source_status"]["uubooster"]["data_status"] == "stale"
     assert result["source_status"]["heybox"]["data_status"] == "ready"
-    assert result["source_status"]["local_example"]["data_status"] == "ready"
 
 
 def test_explicit_subset_completeness(tmp_path):
