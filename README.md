@@ -14,18 +14,19 @@ npm run dev
 
 Visit http://127.0.0.1:8000/ for the dashboard or http://127.0.0.1:8000/docs for the interactive API interface.
 
-## Initial sources
+## Source configuration
 
-- `uubooster`: CIDR text feed
-- `heybox`: JSON feed, `result.ips`
+Source definitions live in the version-controlled `sources.json` file, not in an administrative API. Two feeds are configured initially: `uubooster` (CIDR text) and `heybox` (JSON, `result.ips`).
 
-Both sources are seeded automatically. Refresh them from the dashboard or with `POST /api/v1/sources/{source_id}/refresh`. The latest successful snapshot remains available if a refresh fails. Use `GET /api/v1/sources` for status and `GET /api/v1/data?sources=heybox` for source-specific normalized records and metadata.
+To add, update, disable, or remove a feed, edit `sources.json`, deploy the change, and restart the service. The file is validated at startup; malformed entries, duplicate IDs, non-HTTPS URLs, invalid formats, and invalid refresh intervals prevent startup. You can override the path with `BOOSTER_SOURCES_CONFIG`.
 
-Use `POST /api/v1/sources` to register additional sources. Supported formats: `cidr_text`, `ip_text`, `json` (with a dot-separated `json_path`).
+SQLite retains snapshots, refresh schedules, errors, and history. On startup, source definitions are reconciled into the runtime database. Renaming a source preserves its snapshot; changing URL, format, or JSON path invalidates the previous snapshot. Removing a source removes its active snapshot but retains refresh history. Sources no longer in the file are excluded from the active API and output.
+
+The API supports reading sources, fetching normalized data, viewing history, and manually refreshing feeds. There are **no add, edit, or delete source endpoints**.
 
 ## Security and scope
 
-This development server binds only to localhost and has **no authentication**. Do not expose it publicly or deploy it as-is. Admin endpoints, including source creation and refresh, require authentication before hosting. Sources are HTTPS-only, redirects are disabled, DNS must resolve exclusively to public IPs, and ingestion rejects empty/invalid feeds. Configured URLs should be treated as trusted administrator input; additional network egress controls and DNS-rebinding protections are recommended before deployment.
+The development server binds to localhost and has no authentication. Deploy only behind EA's internal network restrictions and an HTTPS reverse proxy. Source URLs must be HTTPS and resolve to public addresses; redirects are disabled. Fetches have a timeout and a 10 MB response-size check (currently after download). Apply outbound egress restrictions and streaming download limits before exposing source configuration to untrusted operators.
 
 ## Data API
 
@@ -70,7 +71,7 @@ List output is newline-separated, with a trailing newline for nonempty pages. An
 
 Error responses: 404 for unknown source IDs; 422 for invalid query parameters or an empty explicit source selection. A source with no snapshot contributes no records, and `complete=false` signals missing source snapshots. A stale source still contributes its last successful snapshot. Neither output mode refreshes feeds. API documentation is available at `/docs` and the OpenAPI schema at `/openapi.json`.
 
-**Deployment note:** This is a local-only unauthenticated development API. Do not expose it publicly until access policy and authentication are decided.
+**Deployment note:** Run behind internal network access controls and HTTPS termination; API requests are unauthenticated.
 
 ## Local dashboard
 
@@ -86,19 +87,11 @@ The combined output has checkboxes for individual enabled sources (all enabled s
 
 The dashboard offers 1,000 (default), 10,000, and Custom buttons. Custom enables an integer field for 1–1,000,000 results. The same upper bound is enforced by the API to avoid unbounded memory and response sizes, especially when expanding CIDRs into individual IP addresses. Large pages may be slow and memory-intensive; pagination remains recommended.
 
-## Source management
-
-The local dashboard now supports adding sources, editing name/URL/format/JSON path/enabled status, removing sources, and refreshing all enabled sources. Source IDs are immutable after creation. Editing the feed URL, format, or JSON path **clears the old snapshot** to prevent publishing data associated with an outdated feed definition; refresh the source to populate it again. Changing name or enabled status preserves its snapshot. Deletion removes the source, its snapshot, and its refresh history. Deleted built-in sources are not silently re-created on restart; a source with the same ID can be manually added later.
-
-`PUT /api/v1/sources/{source_id}` updates a source, `DELETE /api/v1/sources/{source_id}` removes it, and `POST /api/v1/sources/refresh-all` refreshes each enabled source independently, returning per-source success/failure and totals. Automatic scheduling and refresh history are also available.
-
-**Security:** These management endpoints are unauthenticated and must remain localhost-only. Do not expose the service on the public internet.
-
 ## Automatic refresh and history
 
-Edit a source to enable an automatic refresh interval (1, 6, 12 or 24 hours, or a custom interval of 1–10,080 minutes). Automatic refresh is **off by default**. Intervals and next-run timestamps are persisted in SQLite; disabling a source pauses its schedule. When enabled or reconfigured, the first automatic refresh is scheduled one interval later. Manual refreshes also reset the next scheduled run. A lightweight application-lifecycle worker checks for due refreshes every 30 seconds, while a per-source SQLite lease prevents simultaneous manual/scheduled refreshes across workers sharing the database. Leases expire after 120 seconds to recover from crashed workers; ownership is verified before writing snapshots, so an expired worker cannot overwrite newer data. Keep SQLite on a local filesystem shared by workers on the same host; separate hosts require a shared coordination service.
+Set `refresh_interval_minutes` in `sources.json` to enable an automatic refresh interval (1, 6, 12 or 24 hours, or a custom interval of 1–10,080 minutes). Automatic refresh is **off by default**. Intervals are defined in JSON; next-run timestamps are persisted in SQLite; disabling a source pauses its schedule. When enabled or reconfigured, the first automatic refresh is scheduled one interval later. Manual refreshes also reset the next scheduled run. A lightweight application-lifecycle worker checks for due refreshes every 30 seconds, while a per-source SQLite lease prevents simultaneous manual/scheduled refreshes across workers sharing the database. Leases expire after 120 seconds to recover from crashed workers; ownership is verified before writing snapshots, so an expired worker cannot overwrite newer data. Keep SQLite on a local filesystem shared by workers on the same host; separate hosts require a shared coordination service.
 
-The History button displays recent success/failure events, record counts and errors. API: `GET /api/v1/sources/{source_id}/history?limit=50` (limit 1–200). Failed fetches retain prior snapshots and advance the next scheduled run. The scheduler only runs while the application is running; after restart, overdue schedules are picked up on the next scan. Avoid exposing the unauthenticated service beyond localhost.
+The History button displays recent success/failure events, record counts and errors. API: `GET /api/v1/sources/{source_id}/history?limit=50` (limit 1–200). Failed fetches retain prior snapshots and advance the next scheduled run. The scheduler only runs while the application is running; after restart, overdue schedules are picked up on the next scan. Restrict access to the internal network.
 
 ## Refresh concurrency
 
