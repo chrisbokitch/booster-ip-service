@@ -13,10 +13,6 @@ import httpx
 _refresh_locks = {}
 _refresh_locks_guard = threading.Lock()
 
-DEFAULT_SOURCES = [
-    ("uubooster", "uuBooster", "https://uu-ovproxylist.easebar.com:8889/acc_exitip_ov_cidr_aggregated.txt", "cidr_text", None),
-    ("heybox", "HEYBOX", "https://api.xiaoheihe.cn/heyboxaccip", "json", "result.ips"),
-]
 
 
 def connect(path):
@@ -55,9 +51,53 @@ def init_db(path):
             db.execute("ALTER TABLE sources ADD COLUMN refresh_interval_minutes INTEGER")
         if "next_refresh" not in columns:
             db.execute("ALTER TABLE sources ADD COLUMN next_refresh TEXT")
-        db.execute("CREATE TABLE IF NOT EXISTS deleted_sources (id TEXT PRIMARY KEY)")
-        for source in DEFAULT_SOURCES:
-            db.execute("INSERT OR IGNORE INTO sources(id,name,url,format,json_path) SELECT ?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM deleted_sources WHERE id=?)", (*source, source[0]))
+
+
+
+def sync_source_config(path, definitions):
+    """Reconcile configured sources while retaining snapshots and history.
+
+    Removed sources are deleted from the active table and records; their refresh
+    history is retained. A changed feed definition invalidates its old snapshot.
+    """
+    now = datetime.now(timezone.utc)
+    with connect(path) as db:
+        existing = {row["id"]: row for row in db.execute("SELECT * FROM sources")}
+        configured_ids = set()
+        for source in definitions:
+            source_id = source.id
+            configured_ids.add(source_id)
+            previous = existing.get(source_id)
+            url = str(source.url)
+            changed = previous is not None and (
+                previous["url"] != url or previous["format"] != source.format
+                or previous["json_path"] != source.json_path
+            )
+            interval = source.refresh_interval_minutes
+            next_refresh = (
+                (now + timedelta(minutes=interval)).isoformat()
+                if source.enabled and interval else None
+            )
+            if previous is not None and not changed and bool(previous["enabled"]) == source.enabled and previous["refresh_interval_minutes"] == interval:
+                next_refresh = previous["next_refresh"]
+            if previous is None:
+                db.execute(
+                    "INSERT INTO sources(id,name,url,format,json_path,enabled,refresh_interval_minutes,next_refresh) VALUES (?,?,?,?,?,?,?,?)",
+                    (source_id, source.name, url, source.format, source.json_path, int(source.enabled), interval, next_refresh),
+                )
+            else:
+                db.execute(
+                    "UPDATE sources SET name=?,url=?,format=?,json_path=?,enabled=?,refresh_interval_minutes=?,next_refresh=?,"
+                    "last_success=CASE WHEN ? THEN NULL ELSE last_success END,"
+                    "last_error=CASE WHEN ? THEN NULL ELSE last_error END WHERE id=?",
+                    (source.name, url, source.format, source.json_path, int(source.enabled), interval, next_refresh, changed, changed, source_id),
+                )
+                if changed:
+                    db.execute("DELETE FROM records WHERE source_id=?", (source_id,))
+        for source_id in existing.keys() - configured_ids:
+            db.execute("DELETE FROM records WHERE source_id=?", (source_id,))
+            db.execute("DELETE FROM refresh_leases WHERE source_id=?", (source_id,))
+            db.execute("DELETE FROM sources WHERE id=?", (source_id,))
 
 
 def parse_feed(raw, fmt, json_path=None):
