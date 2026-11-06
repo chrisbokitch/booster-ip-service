@@ -126,3 +126,16 @@ def test_saved_format_buttons_are_alphabetical_and_delete_requires_confirmation(
     assert 'pendingDeleteFormat = name' in js
     assert 'el("delete-format-dialog").showModal()' in js
     assert 'el("confirm-delete-format").addEventListener("click"' in js
+
+
+def test_header_about_dialog():
+    client = TestClient(main.app)
+    html = client.get("/").text
+    js = client.get("/static/app.js").text
+    assert "Source snapshots and normalized network output" not in html
+    assert 'href="/docs"' in html
+    assert 'id="open-about"' in html
+    assert 'id="about-dialog"' in html
+    assert 'id="close-about"' in html
+    assert 'el("about-dialog").showModal()' in js
+    assert 'el("about-dialog").close()' in js
