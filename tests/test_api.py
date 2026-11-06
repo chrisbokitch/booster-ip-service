@@ -79,7 +79,7 @@ def test_source_management_is_config_only(tmp_path, monkeypatch):
     assert client.put("/api/v1/sources/heybox", json={}).status_code == 404
     assert client.delete("/api/v1/sources/heybox").status_code == 404
     assert client.get("/api/v1/sources").status_code == 200
-    assert len(load_source_config()) == 2
+    assert len(load_source_config()) == 3
     sync_source_config(path, load_source_config())
 
 
