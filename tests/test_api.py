@@ -64,17 +64,38 @@ def test_output_parameter_validation(tmp_path, monkeypatch):
     assert "/api/v1/data.txt" not in {route.path for route in main.app.routes}
 
 
-def test_swagger_source_examples_are_valid_and_formats_are_enumerated():
+def test_source_management_is_config_only(tmp_path, monkeypatch):
+    from app.config import load_source_config
+    from app.core import sync_source_config
+    path = tmp_path / "service.db"
+    init_db(path)
+    monkeypatch.setattr(main, "DB_PATH", str(path))
     client = TestClient(main.app)
     schema = client.get("/openapi.json").json()
-    models = schema["components"]["schemas"]
-    for model_name in ("SourceInput", "SourceConfig"):
-        model = models[model_name]
-        example = model["example"]
-        assert example["format"] == "cidr_text"
-        assert example.get("json_path") is None
-        assert example["url"].startswith("https://")
-        assert example["refresh_interval_minutes"] == 1440
-        assert model["properties"]["format"]["enum"] == ["cidr_text", "ip_text", "json"]
-    assert models["SourceInput"]["example"]["id"] == "example_feed"
-    assert client.post("/api/v1/sources", json={**models["SourceInput"]["example"], "format": "string"}).status_code == 422
+    routes = schema["paths"]
+    assert "post" not in routes["/api/v1/sources"]
+    assert "/api/v1/sources/{source_id}" not in routes
+    assert client.post("/api/v1/sources", json={}).status_code == 405
+    assert client.put("/api/v1/sources/heybox", json={}).status_code == 405
+    assert client.delete("/api/v1/sources/heybox").status_code == 405
+    assert client.get("/api/v1/sources").status_code == 200
+    assert len(load_source_config()) == 2
+    sync_source_config(path, load_source_config())
+
+
+def test_config_change_invalidates_snapshot_and_preserves_history(tmp_path):
+    from app.config import SourceDefinition
+    from app.core import sync_source_config
+    path = tmp_path / "service.db"
+    init_db(path)
+    with connect(path) as db:
+        db.execute("INSERT INTO records VALUES (?,?)", ("heybox", "192.0.2.0/24"))
+        db.execute("UPDATE sources SET last_success='2026-11-05' WHERE id='heybox'")
+        db.execute("INSERT INTO refresh_history(source_id,at,success,count) VALUES ('heybox','2026-11-05',1,1)")
+    changed = SourceDefinition(id="heybox", name="HEYBOX", url="https://example.com/updated", format="ip_text")
+    sync_source_config(path, [changed])
+    with connect(path) as db:
+        assert db.execute("SELECT COUNT(*) FROM records WHERE source_id='heybox'").fetchone()[0] == 0
+        assert db.execute("SELECT last_success FROM sources WHERE id='heybox'").fetchone()[0] is None
+        assert db.execute("SELECT COUNT(*) FROM refresh_history WHERE source_id='heybox'").fetchone()[0] == 1
+        assert db.execute("SELECT COUNT(*) FROM sources").fetchone()[0] == 1
