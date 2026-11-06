@@ -112,3 +112,17 @@ def test_saved_output_formats_can_be_removed_and_custom_is_last():
     assert 'delete updated[name]' in js
     assert 'localStorage.setItem(savedFormatsKey, JSON.stringify(updated))' in js
     assert 'outputMode = "list"' in js
+
+
+def test_saved_format_buttons_are_alphabetical_and_delete_requires_confirmation():
+    client = TestClient(main.app)
+    html = client.get("/").text
+    js = client.get("/static/app.js").text
+    assert 'Object.keys(savedFormats).sort((a, b) => a.localeCompare(b' in js
+    assert html.index('id="output-list"') < html.index('id="saved-output-buttons"') < html.index('id="output-custom"')
+    assert 'id="delete-format-dialog"' in html
+    assert 'id="cancel-delete-format"' in html
+    assert 'id="confirm-delete-format"' in html
+    assert 'pendingDeleteFormat = name' in js
+    assert 'el("delete-format-dialog").showModal()' in js
+    assert 'el("confirm-delete-format").addEventListener("click"' in js
