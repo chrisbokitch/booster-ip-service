@@ -67,17 +67,6 @@ def test_output_sidebar_settings_are_persisted():
     assert "saveOutputSettings();" in js
 
 
-def test_source_management_feedback_has_separate_status_area():
-    client = TestClient(main.app)
-    home = client.get("/")
-    assert 'id="source-message" role="status"' in home.text
-    js = client.get("/static/app.js").text
-    assert 'function sourceMessage(value)' in js
-    assert 'sourceMessage(result.snapshot_cleared ?' in js
-    assert 'sourceMessage(row.name + " removed.")' in js
-    assert 'sourceMessage("Remove failed: " + error.message)' in js
-
-
 def test_source_refresh_feedback_uses_card_footer():
     client = TestClient(main.app)
     js = client.get("/static/app.js").text
@@ -87,4 +76,13 @@ def test_source_refresh_feedback_uses_card_footer():
     assert 'sourceNotices.get(row.id)' in js
     assert '"source-footer"' in js
     assert '.source-footer{' in css
-    assert 'height:56px' in css
+    assert 'height:30px' in css
+
+
+def test_source_save_and_remove_use_card_footers():
+    client = TestClient(main.app)
+    js = client.get("/static/app.js").text
+    assert 'setSourceNotice(editingSource || payload.id' in js
+    assert 'setSourceNotice(row.id, "Remove failed: "' in js
+    assert '"Source removed.", "source-footer"' in js
+    assert 'sourceMessage(' not in js
