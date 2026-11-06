@@ -7,7 +7,7 @@
       "format": "cidr_text",
       "json_path": null,
       "enabled": true,
-      "refresh_interval_minutes": null,
+      "refresh_interval_minutes": 1440,
       "cntry_origin": "CN"
     },
     {
@@ -17,8 +17,18 @@
       "format": "json",
       "json_path": "result.ips",
       "enabled": true,
-      "refresh_interval_minutes": null,
+      "refresh_interval_minutes": 1440,
       "cntry_origin": "CN"
+    },
+    {
+      "id": "local_example",
+      "name": "Local Example",
+      "file_path": "feeds/local_example.txt",
+      "format": "cidr_text",
+      "json_path": null,
+      "enabled": true,
+      "refresh_interval_minutes": null,
+      "cntry_origin": null
     }
   ]
 }
