@@ -14,15 +14,76 @@ npm run dev
 
 Visit http://127.0.0.1:8000/ for the dashboard or http://127.0.0.1:8000/docs for the interactive API interface.
 
-## Source configuration
+## Configuring sources
 
-Source definitions live in the version-controlled `sources.json` file, not in an administrative API. Each source specifies exactly one of `url` (HTTPS) or `file_path` (local file), plus a `format` (`cidr_text`, `ip_text`, or `json`), an optional two-letter uppercase `cntry_origin` country code, `enabled`, and an optional `refresh_interval_minutes`. Two feeds are configured initially: `uubooster` (CIDR text) and `heybox` (JSON, `result.ips`).
+Source definitions are maintained in the version-controlled `sources.json` file. The application validates the file at startup and synchronizes source definitions into SQLite. Source configuration is not editable through the API or dashboard.
 
-For a manually supplied list, place the UTF-8 text file on the application host and configure a relative `file_path` such as `feeds/manual-booster.txt`. Relative paths resolve from the directory containing `sources.json`; absolute paths are also supported. Local files are parsed by the same ingestion pipeline as URL feeds and must be explicitly refreshed (or given a refresh interval). A missing, oversized (over 10 MB), empty, or invalid local file fails the refresh without replacing the last successful snapshot. The service account needs read access to the file. The file must exist on the server, not only on an administrator’s workstation.\n\nExample local source:\n\n```json\n{\n  "id": "manual_booster",\n  "name": "Manual Booster",\n  "file_path": "feeds/manual-booster.txt",\n  "format": "cidr_text",\n  "cntry_origin": "CN",\n  "enabled": true,\n  "refresh_interval_minutes": null\n}\n```\n\nTo add, update, disable, or remove a feed, edit `sources.json`, deploy the change, and restart the service. The file is validated at startup; malformed entries, duplicate IDs, non-HTTPS URLs, invalid formats, and invalid refresh intervals prevent startup. You can override the path with `BOOSTER_SOURCES_CONFIG`.
+The `sources` array contains one object per feed. Each source supports:
 
-SQLite retains snapshots, refresh schedules, errors, and history. On startup, source definitions are reconciled into the runtime database. Renaming a source preserves its snapshot; changing URL, format, or JSON path invalidates the previous snapshot. Removing a source removes its active snapshot but retains refresh history. Sources no longer in the file are excluded from the active API and output.
+| Attribute | Required | Description |
+| --- | --- | --- |
+| `id` | Yes | Unique, stable ID: lowercase letter followed by 1–63 lowercase letters, digits, underscores or hyphens |
+| `name` | Yes | Display name, 1–100 characters |
+| `url` | One of `url` / `file_path` | HTTPS URL for an automated upstream feed; credentials and redirects are not supported |
+| `file_path` | One of `url` / `file_path` | Local file on the service host; relative paths resolve from the directory containing `sources.json` |
+| `format` | Yes | `cidr_text`, `ip_text`, or `json` |
+| `json_path` | For JSON feeds | Dot-separated path to an array of IP strings, e.g. `result.ips` |
+| `cntry_origin` | No | Two-letter uppercase country code (e.g. `CN`); descriptive source metadata, not IP geolocation |
+| `enabled` | No | Boolean; defaults to `true` |
+| `refresh_interval_minutes` | No | `null` (default) disables automatic refresh; integer 1–10,080 enables it; `1440` means every 24 hours. **Zero is invalid.** |
 
-The API supports reading sources, fetching normalized data, viewing history, and manually refreshing feeds. There are **no add, edit, or delete source endpoints**.
+### HTTPS source example
+
+```json
+{
+  "id": "example_remote",
+  "name": "Example Remote",
+  "url": "https://example.com/networks.txt",
+  "format": "cidr_text",
+  "cntry_origin": "CN",
+  "enabled": true,
+  "refresh_interval_minutes": 1440
+}
+```
+
+### Local file source example
+
+For a booster that provides a list directly, save it as a UTF-8 text file on the application host, for example `feeds/manual-booster.txt`:
+
+```text
+2001:db8:10::/48
+2001:db8:20::/48
+192.0.2.0/24
+```
+
+Add the following object to the `sources` array in `sources.json`:
+
+```json
+{
+  "id": "manual_booster",
+  "name": "Manual Booster",
+  "file_path": "feeds/manual-booster.txt",
+  "format": "cidr_text",
+  "cntry_origin": "CN",
+  "enabled": true,
+  "refresh_interval_minutes": null
+}
+```
+
+The `cidr_text` format accepts one IP address or CIDR range per line, ignoring blank lines and lines beginning with `#`. Use `ip_text` for lists of individual addresses. The `json` format expects an array of IP addresses at the specified `json_path`. Local and HTTPS feeds use the same validation and normalization pipeline.
+
+The local file must exist **on the service host**, and the service account needs permission to read it. A local file is ingested when manually refreshed from the dashboard or API, or when its configured automatic refresh becomes due. Changing the file on disk does not automatically trigger ingestion. Missing, empty, invalid, or oversized (over 10 MB) files fail the refresh without overwriting the previous successful snapshot.
+
+### Applying changes
+
+1. Add or edit entries in `sources.json` (or the path set by `BOOSTER_SOURCES_CONFIG`).
+2. Deploy the configuration and any required local files.
+3. Restart the service to load the definitions.
+4. Manually refresh newly added sources to populate their snapshots immediately, if desired.
+
+A changed source URL, local file path, format, or JSON path invalidates its cached snapshot. Renaming a source or updating its country metadata preserves the snapshot. Removing a source removes it and its active snapshot from SQLite; refresh history is retained. Invalid configuration prevents startup rather than silently skipping a source.
+
+The current configuration includes **uuBooster** and **HEYBOX**, both with `cntry_origin: "CN"` and automatic refresh every 1,440 minutes (24 hours). The API exposes source status, history, data, and manual refresh operations, but no source creation, editing, or deletion endpoints.
 
 ## Security and scope
 
