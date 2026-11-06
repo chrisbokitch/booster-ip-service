@@ -34,7 +34,8 @@ def test_inline_edit_mode_markup():
     assert 'id="refresh-all"' in home.text
     assert 'id="output-list"' in home.text
     assert 'id="output-custom"' in home.text
-    assert 'id="output-template"' in home.text
+    for field in ("header", "entry", "separator", "footer"):
+        assert f'id="output-{field}"' in home.text
     assert 'id="output-template-wrap" hidden' in home.text
     assert 'id="history-dialog"' in home.text
     assert client.get("/edit").status_code == 404
@@ -42,7 +43,7 @@ def test_inline_edit_mode_markup():
     assert 'el("edit-warning-dialog").showModal()' in js
     assert 'setEditMode(true)' in js
     assert 'setEditMode(false)' in js
-    assert 'template.includes("{value}")' in js
-    assert 'template.replaceAll("{values}"' in js
-    assert 'el("output-template").addEventListener("input", renderOutput)' in js
+    assert 'entry.replaceAll("{value}", value)' in js
+    assert 'localStorage.setItem(formatterKey' in js
+    assert 'restoreFormatter();' in js
     assert 'if (editMode) actions.append(remove)' in js
