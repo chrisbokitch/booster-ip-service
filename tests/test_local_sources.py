@@ -10,7 +10,7 @@ from app.core import connect, init_db, refresh_source, sync_source_config
 
 def test_local_file_ingestion_and_country_metadata(tmp_path, monkeypatch):
     feed = tmp_path / "manual.txt"
-    feed.write_text("192.0.2.0/24\\n198.51.100.0/24\\n", encoding="utf-8")
+    feed.write_text("192.0.2.0/24\n198.51.100.0/24\n", encoding="utf-8")
     config = tmp_path / "sources.json"
     config.write_text(json.dumps({"sources": [{
         "id": "manualfeed", "name": "Manual feed", "file_path": "manual.txt",
@@ -29,7 +29,7 @@ def test_local_file_ingestion_and_country_metadata(tmp_path, monkeypatch):
     assert source["cntry_origin"] == "US"
     assert source["file_path"] == str(feed.resolve())
     assert client.get("/api/v1/data", params={"sources": "manualfeed"}).json()["total"] == 2
-    feed.write_text("invalid\\n", encoding="utf-8")
+    feed.write_text("invalid\n", encoding="utf-8")
     with pytest.raises(ValueError):
         refresh_source(db_path, "manualfeed")
     with connect(db_path) as db:
