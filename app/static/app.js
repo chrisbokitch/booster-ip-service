@@ -79,6 +79,12 @@ function restoreOutputSettings() {
   el("output-template-wrap").hidden = outputMode !== "custom";
 }
 
+const sourceNotices = new Map();
+function setSourceNotice(id, value) {
+  sourceNotices.set(id, value);
+  const footer = [...document.querySelectorAll(".source-footer")].find(item => item.dataset.sourceId === id);
+  if (footer) footer.textContent = value;
+}
 let editingSource = null;
 let editMode = false;
 function setEditMode(enabled) {
@@ -148,12 +154,13 @@ async function loadSources() {
     const refresh = node("button", "Refresh");
     refresh.type = "button"; refresh.disabled = !row.enabled;
     refresh.addEventListener("click", async () => {
-      refresh.disabled = true; refresh.textContent = "Refreshing…"; message("Refreshing " + row.name + "…");
+      refresh.disabled = true; refresh.textContent = "Refreshing…"; setSourceNotice(row.id, "Refreshing…");
       try {
         await api("/api/v1/sources/" + encodeURIComponent(row.id) + "/refresh", {method:"POST"});
-        await loadSources(); offset = 0; await loadData(); message(row.name + " refreshed.");
+        setSourceNotice(row.id, "Refresh complete.");
+        await loadSources(); offset = 0; await loadData();
       } catch (error) {
-        message(error.message === "Source refresh already in progress"
+        setSourceNotice(row.id, error.message === "Source refresh already in progress"
           ? row.name + " is already refreshing. No additional refresh was started."
           : "Refresh failed: " + error.message);
         await loadSources();
@@ -167,6 +174,7 @@ async function loadSources() {
       try {
         await api("/api/v1/sources/" + encodeURIComponent(row.id), {method:"DELETE"});
         selectedSources.delete(row.id);
+        sourceNotices.delete(row.id);
         await loadSources(); offset = 0; await loadData(); sourceMessage(row.name + " removed.");
       } catch (error) { sourceMessage("Remove failed: " + error.message); }
     });
@@ -177,7 +185,12 @@ async function loadSources() {
     if (editMode) actions.append(edit);
     actions.append(history);
     if (editMode) actions.append(remove);
-    card.append(actions); target.append(card);
+    card.append(actions);
+    const footer = node("div", sourceNotices.get(row.id) || "", "source-footer");
+    footer.dataset.sourceId = row.id;
+    footer.setAttribute("role", "status");
+    footer.setAttribute("aria-live", "polite");
+    card.append(footer); target.append(card);
   }
   if (!rows.length) target.textContent = "No sources configured.";
 }
