@@ -1,0 +1,22 @@
+{
+  "sources": [
+    {
+      "id": "uubooster",
+      "name": "uuBooster",
+      "url": "https://uu-ovproxylist.easebar.com:8889/acc_exitip_ov_cidr_aggregated.txt",
+      "format": "cidr_text",
+      "json_path": null,
+      "enabled": true,
+      "refresh_interval_minutes": null
+    },
+    {
+      "id": "heybox",
+      "name": "HEYBOX",
+      "url": "https://api.xiaoheihe.cn/heyboxaccip",
+      "format": "json",
+      "json_path": "result.ips",
+      "enabled": true,
+      "refresh_interval_minutes": null
+    }
+  ]
+}
