@@ -3,6 +3,17 @@ const el = id => document.getElementById(id);
 let page = null, offset = 0, sources = [];
 let selectedSources = null;
 let limitMode = "1000";
+let outputMode = "list";
+function formatOutput(values) {
+  if (outputMode === "list") return values.join("\n");
+  const template = el("output-template").value;
+  if (template.includes("{value}")) return values.map(value => template.replaceAll("{value}", value)).join("\n");
+  return template.replaceAll("{values}", values.join("\n"));
+}
+function renderOutput() {
+  el("output").value = page ? formatOutput(page.data) : "";
+}
+
 let editingSource = null;
 let editMode = false;
 function setEditMode(enabled) {
@@ -122,7 +133,7 @@ async function loadData() {
   }
   const params = new URLSearchParams({format:el("format").value,family:el("family").value,limit:String(limit),offset:String(offset),sources:[...selectedSources].sort().join(",")});
   page = await api("/api/v1/data?" + params);
-  el("output").value = page.data.join("\n");
+  renderOutput();
   el("summary").textContent = page.total.toLocaleString() + " total · " + (page.complete ? "Complete" : "Missing source data");
   el("previous").disabled = offset === 0;
   el("next").disabled = !page.has_more;
@@ -130,6 +141,20 @@ async function loadData() {
   el("download").disabled = !page.count;
   message(page.count ? "Showing " + (offset + 1).toLocaleString() + "–" + (offset + page.count).toLocaleString() + " of " + page.total.toLocaleString() : "No records on this page.");
 }
+for (const mode of ["list", "custom"]) {
+  el("output-" + mode).addEventListener("click", () => {
+    outputMode = mode;
+    for (const option of ["list", "custom"]) {
+      const active = option === mode;
+      el("output-" + option).classList.toggle("active", active);
+      el("output-" + option).setAttribute("aria-pressed", String(active));
+    }
+    el("output-template-wrap").hidden = mode !== "custom";
+    el("output-template-help").hidden = mode !== "custom";
+    renderOutput();
+  });
+}
+el("output-template").addEventListener("input", renderOutput);
 async function refreshAll() { try { await loadSources(); await loadData(); } catch (error) { message("Unable to load data: " + error.message); } }
 for (const id of ["format","family"]) el(id).addEventListener("change", () => { offset = 0; loadData().catch(e => message(e.message)); });
 for (const button of document.querySelectorAll(".page-preset")) {
