@@ -37,6 +37,48 @@ function restoreFormatter() {
   } catch (_) { /* Ignore unavailable or invalid browser storage. */ }
 }
 
+const settingsKey = "booster-ip-service.output-settings.v1";
+let savedSourceIds = null;
+function saveOutputSettings() {
+  try {
+    localStorage.setItem(settingsKey, JSON.stringify({
+      sources: [...(selectedSources || [])],
+      format: el("format").value,
+      family: el("family").value,
+      limitMode,
+      limit: el("limit").value,
+      outputMode
+    }));
+  } catch (_) { /* Local storage may be unavailable. */ }
+}
+function restoreOutputSettings() {
+  try {
+    const settings = JSON.parse(localStorage.getItem(settingsKey) || "null");
+    if (!settings || typeof settings !== "object") return;
+    if (Array.isArray(settings.sources) && settings.sources.every(id => typeof id === "string"))
+      savedSourceIds = settings.sources;
+    if (["cidr", "ip"].includes(settings.format)) el("format").value = settings.format;
+    if (["all", "ipv4", "ipv6"].includes(settings.family)) el("family").value = settings.family;
+    if (["1000", "10000", "custom"].includes(settings.limitMode)) limitMode = settings.limitMode;
+    if (typeof settings.limit === "string" && /^[0-9]+$/.test(settings.limit)
+        && Number(settings.limit) >= 1 && Number(settings.limit) <= 1000000)
+      el("limit").value = settings.limit;
+    if (["list", "custom"].includes(settings.outputMode)) outputMode = settings.outputMode;
+  } catch (_) { /* Ignore corrupt or unavailable storage. */ }
+  for (const button of document.querySelectorAll(".page-size-control .page-preset")) {
+    const active = button.dataset.limit === limitMode;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  }
+  el("custom-limit-wrap").hidden = limitMode !== "custom";
+  for (const mode of ["list", "custom"]) {
+    const active = mode === outputMode;
+    el("output-" + mode).classList.toggle("active", active);
+    el("output-" + mode).setAttribute("aria-pressed", String(active));
+  }
+  el("output-template-wrap").hidden = outputMode !== "custom";
+}
+
 let editingSource = null;
 let editMode = false;
 function setEditMode(enabled) {
@@ -73,7 +115,7 @@ async function loadSources() {
   const rows = await api("/api/v1/sources");
   sources = rows;
   const enabledIds = rows.filter(row => row.enabled).map(row => row.id);
-  if (selectedSources === null) selectedSources = new Set(enabledIds);
+  if (selectedSources === null) selectedSources = new Set(savedSourceIds === null ? enabledIds : savedSourceIds.filter(id => enabledIds.includes(id)));
   else selectedSources = new Set([...selectedSources].filter(id => enabledIds.includes(id)));
   const selection = el("source-selection"); selection.replaceChildren();
   for (const row of rows) {
@@ -85,6 +127,7 @@ async function loadSources() {
     checkbox.addEventListener("change", () => {
       if (checkbox.checked) selectedSources.add(row.id);
       else selectedSources.delete(row.id);
+      saveOutputSettings();
       offset = 0; loadData().catch(e => message(e.message));
     });
     label.append(checkbox, node("span", row.name + (row.enabled ? "" : " (disabled)")));
@@ -173,6 +216,7 @@ for (const mode of ["list", "custom"]) {
       el("output-" + option).setAttribute("aria-pressed", String(active));
     }
     el("output-template-wrap").hidden = mode !== "custom";
+    saveOutputSettings();
     renderOutput();
   });
 }
@@ -181,7 +225,7 @@ for (const field of formatterFields) {
   el("output-" + field).addEventListener("input", () => { saveFormatter(); renderOutput(); });
 }
 async function refreshAll() { try { await loadSources(); await loadData(); } catch (error) { message("Unable to load data: " + error.message); } }
-for (const id of ["format","family"]) el(id).addEventListener("change", () => { offset = 0; loadData().catch(e => message(e.message)); });
+for (const id of ["format","family"]) el(id).addEventListener("change", () => { saveOutputSettings(); offset = 0; loadData().catch(e => message(e.message)); });
 for (const button of document.querySelectorAll(".page-size-control .page-preset")) {
   button.addEventListener("click", () => {
     limitMode = button.dataset.limit;
@@ -191,12 +235,13 @@ for (const button of document.querySelectorAll(".page-size-control .page-preset"
       other.setAttribute("aria-pressed", String(active));
     }
     el("custom-limit-wrap").hidden = limitMode !== "custom";
+    saveOutputSettings();
     if (limitMode === "custom") el("limit").focus();
     else { el("limit").setCustomValidity(""); offset = 0; loadData().catch(e => message(e.message)); }
   });
 }
 el("limit").addEventListener("change", () => {
-  if (limitMode === "custom") { offset = 0; loadData().catch(e => message(e.message)); }
+  if (limitMode === "custom") { saveOutputSettings(); offset = 0; loadData().catch(e => message(e.message)); }
 });
 async function showHistory(row) {
   el("history-title").textContent = row.name + " — Refresh history";
@@ -282,6 +327,7 @@ el("reload").addEventListener("click", refreshAll);
 el("select-all").addEventListener("click", () => {
   selectedSources = new Set(sources.filter(row => row.enabled).map(row => row.id));
   for (const checkbox of el("source-selection").querySelectorAll("input")) checkbox.checked = selectedSources.has(checkbox.value);
+  saveOutputSettings();
   offset = 0; loadData().catch(e => message(e.message));
 });
 el("previous").addEventListener("click", () => { offset = Math.max(0, offset - (page ? page.limit : 1000)); loadData().catch(e => message(e.message)); });
@@ -294,4 +340,5 @@ el("download").addEventListener("click", () => {
   link.href = url; link.download = "booster-" + page.format + "-" + page.offset + ".txt"; link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 });
+restoreOutputSettings();
 refreshAll();
