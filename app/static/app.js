@@ -4,14 +4,37 @@ let page = null, offset = 0, sources = [];
 let selectedSources = null;
 let limitMode = "1000";
 let outputMode = "list";
+const formatterKey = "booster-ip-service.custom-output.v1";
+const formatterFields = ["header", "entry", "separator", "footer"];
+function decodeSeparator(value) {
+  return value.replace(/\\(n|t|\\)/g, (_, code) =>
+    code === "n" ? "\n" : code === "t" ? "\t" : "\\");
+}
 function formatOutput(values) {
   if (outputMode === "list") return values.join("\n");
-  const template = el("output-template").value;
-  if (template.includes("{value}")) return values.map(value => template.replaceAll("{value}", value)).join("\n");
-  return template.replaceAll("{values}", values.join("\n"));
+  const header = el("output-header").value;
+  const entry = el("output-entry").value;
+  const separator = decodeSeparator(el("output-separator").value);
+  const footer = el("output-footer").value;
+  return header + values.map(value => entry.replaceAll("{value}", value)).join(separator) + footer;
 }
 function renderOutput() {
   el("output").value = page ? formatOutput(page.data) : "";
+}
+function saveFormatter() {
+  try {
+    const settings = Object.fromEntries(formatterFields.map(field => [field, el("output-" + field).value]));
+    localStorage.setItem(formatterKey, JSON.stringify(settings));
+  } catch (_) { /* Storage may be disabled; the formatter still works for this session. */ }
+}
+function restoreFormatter() {
+  try {
+    const settings = JSON.parse(localStorage.getItem(formatterKey) || "null");
+    if (!settings || typeof settings !== "object") return;
+    for (const field of formatterFields) {
+      if (typeof settings[field] === "string") el("output-" + field).value = settings[field];
+    }
+  } catch (_) { /* Ignore unavailable or invalid browser storage. */ }
 }
 
 let editingSource = null;
@@ -150,11 +173,13 @@ for (const mode of ["list", "custom"]) {
       el("output-" + option).setAttribute("aria-pressed", String(active));
     }
     el("output-template-wrap").hidden = mode !== "custom";
-    el("output-template-help").hidden = mode !== "custom";
     renderOutput();
   });
 }
-el("output-template").addEventListener("input", renderOutput);
+restoreFormatter();
+for (const field of formatterFields) {
+  el("output-" + field).addEventListener("input", () => { saveFormatter(); renderOutput(); });
+}
 async function refreshAll() { try { await loadSources(); await loadData(); } catch (error) { message("Unable to load data: " + error.message); } }
 for (const id of ["format","family"]) el(id).addEventListener("change", () => { offset = 0; loadData().catch(e => message(e.message)); });
 for (const button of document.querySelectorAll(".page-preset")) {
