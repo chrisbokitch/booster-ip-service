@@ -55,3 +55,13 @@ def test_page_size_handlers_do_not_include_output_mode_buttons():
     js = script.read_text(encoding='utf-8')
     assert 'document.querySelectorAll(".page-size-control .page-preset")' in js
     assert 'document.querySelectorAll(".page-preset")' not in js
+
+
+def test_output_sidebar_settings_are_persisted():
+    from pathlib import Path
+    js = (Path(main.__file__).parent / "static" / "app.js").read_text(encoding="utf-8")
+    assert 'const settingsKey = "booster-ip-service.output-settings.v1"' in js
+    assert "localStorage.setItem(settingsKey" in js
+    assert "restoreOutputSettings();" in js
+    assert "savedSourceIds.filter(id => enabledIds.includes(id))" in js
+    assert "saveOutputSettings();" in js
