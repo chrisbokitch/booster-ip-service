@@ -27,7 +27,7 @@ class SourceDefinition(BaseModel):
             raise ValueError("Source URL must use HTTPS without credentials")
         if self.format == "json" and not self.json_path:
             raise ValueError("JSON feeds require json_path")
-        if self.json_path and not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*", self.json_path):
+        if self.json_path and not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*", self.json_path):
             raise ValueError("Invalid JSON path")
         return self
 
