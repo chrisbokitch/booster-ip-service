@@ -21,32 +21,25 @@ def test_existing_api_routes_still_exist():
 
 
 
-def test_inline_edit_mode_markup():
+def test_dashboard_source_management_is_api_only():
     client = TestClient(main.app)
     home = client.get("/")
     assert home.status_code == 200
-    assert 'id="toggle-edit"' in home.text
-    assert 'id="add-source" type="button" hidden' in home.text
-    assert 'id="edit-warning-dialog"' in home.text
-    assert 'id="confirm-edit-warning"' in home.text
-    assert 'id="cancel-edit-warning"' in home.text
-    assert 'id="source-form"' in home.text
+    for element_id in ("toggle-edit", "add-source", "edit-warning-dialog", "source-dialog", "source-form"):
+        assert f'id="{element_id}"' not in home.text
     assert 'id="refresh-all"' in home.text
+    assert 'id="history-dialog"' in home.text
     assert 'id="output-list"' in home.text
     assert 'id="output-custom"' in home.text
-    for field in ("header", "entry", "separator", "footer"):
-        assert f'id="output-{field}"' in home.text
-    assert 'id="output-template-wrap" class="output-template-fields" hidden' in home.text
-    assert 'id="history-dialog"' in home.text
     assert client.get("/edit").status_code == 404
     js = client.get("/static/app.js").text
-    assert 'el("edit-warning-dialog").showModal()' in js
-    assert 'setEditMode(true)' in js
-    assert 'setEditMode(false)' in js
+    assert 'openSourceDialog' not in js
+    assert 'setEditMode' not in js
+    assert 'method:"DELETE"' not in js
+    assert 'method: editingSource ? "PUT" : "POST"' not in js
+    assert 'actions.append(refresh)' in js
+    assert 'actions.append(history)' in js
     assert 'entry.replaceAll("{value}", value)' in js
-    assert 'localStorage.setItem(formatterKey' in js
-    assert 'restoreFormatter();' in js
-    assert 'if (editMode) actions.append(remove)' in js
 
 
 def test_page_size_handlers_do_not_include_output_mode_buttons():
@@ -77,15 +70,6 @@ def test_source_refresh_feedback_uses_card_footer():
     assert '"source-footer"' in js
     assert '.source-footer{' in css
     assert 'height:30px' in css
-
-
-def test_source_save_and_remove_use_card_footers():
-    client = TestClient(main.app)
-    js = client.get("/static/app.js").text
-    assert 'setSourceNotice(editingSource || payload.id' in js
-    assert 'setSourceNotice(row.id, "Remove failed: "' in js
-    assert '"Source removed.", "source-footer"' in js
-    assert 'sourceMessage(' not in js
 
 
 def test_named_custom_output_formats_are_browser_local():
