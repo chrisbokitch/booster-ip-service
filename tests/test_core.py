@@ -28,3 +28,20 @@ def test_defaults_idempotent(tmp_path):
     init_db(path)
     with connect(path) as db:
         assert db.execute('SELECT COUNT(*) FROM sources').fetchone()[0] == 2
+
+
+def test_source_config_rejects_invalid_and_duplicate_entries(tmp_path):
+    from app.config import load_source_config
+    path = tmp_path / "sources.json"
+    path.write_text(json.dumps({"sources": [
+        {"id": "sample", "name": "Sample", "url": "http://example.com/feed", "format": "cidr_text"}
+    ]}), encoding="utf-8")
+    with pytest.raises(ValueError):
+        load_source_config(path)
+    entry = {"id": "sample", "name": "Sample", "url": "https://example.com/feed", "format": "cidr_text"}
+    path.write_text(json.dumps({"sources": [entry, entry]}), encoding="utf-8")
+    with pytest.raises(ValueError, match="Duplicate source IDs"):
+        load_source_config(path)
+    path.write_text(json.dumps({"sources": [{**entry, "format": "invalid"}]}), encoding="utf-8")
+    with pytest.raises(ValueError):
+        load_source_config(path)
