@@ -4,7 +4,8 @@ import threading
 from datetime import datetime, timezone, timedelta
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl, ConfigDict
+from typing import Literal
 from sqlite3 import IntegrityError
 from .core import connect, init_db, refresh_source, refresh_due_sources
 from .processing import source_data_status, aggregate
@@ -33,20 +34,38 @@ async def lifespan(app):
 app = FastAPI(title='Booster IP Service', version='0.1.0', lifespan=lifespan)
 
 class SourceConfig(BaseModel):
-    name: str = Field(min_length=1, max_length=100)
-    url: HttpUrl
-    format: str
-    json_path: str | None = None
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "name": "Example CIDR feed",
+            "url": "https://example.com/networks.txt",
+            "format": "cidr_text",
+            "json_path": None,
+            "enabled": True,
+            "refresh_interval_minutes": 1440,
+        }
+    })
+    name: str = Field(min_length=1, max_length=100, examples=["Example CIDR feed"])
+    url: HttpUrl = Field(examples=["https://example.com/networks.txt"])
+    format: Literal['cidr_text', 'ip_text', 'json'] = Field(description="Feed input format")
+    json_path: str | None = Field(default=None, description="Dot-separated path to the array for JSON feeds; omit for text feeds")
     enabled: bool = True
     refresh_interval_minutes: int | None = Field(default=None, ge=1, le=10080)
 
+
 class SourceInput(SourceConfig):
-    id: str = Field(pattern=r'^[a-z][a-z0-9_-]{1,63}$')
-    name: str = Field(min_length=1, max_length=100)
-    url: HttpUrl
-    format: str
-    json_path: str | None = None
-    enabled: bool = True
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "id": "example_feed",
+            "name": "Example CIDR feed",
+            "url": "https://example.com/networks.txt",
+            "format": "cidr_text",
+            "json_path": None,
+            "enabled": True,
+            "refresh_interval_minutes": 1440,
+        }
+    })
+    id: str = Field(pattern=r'^[a-z][a-z0-9_-]{1,63}$', examples=["example_feed"])
+
 
 def validate_source(source):
     if source.format not in ('cidr_text', 'ip_text', 'json'):
@@ -171,7 +190,6 @@ def refresh(source_id: str):
     except Exception as exc:
         raise HTTPException(502,f'Refresh failed: {exc}')
 
-from typing import Literal
 from fastapi import Query
 from fastapi.responses import PlainTextResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
