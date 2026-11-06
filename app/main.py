@@ -139,10 +139,17 @@ def refresh_all_sources():
         try:
             result = refresh_source(DB_PATH, source_id)
             results.append({'source': source_id, 'success': True, 'count': result['count']})
+        except RuntimeError as exc:
+            if str(exc) == 'Source refresh already in progress':
+                results.append({'source': source_id, 'success': False, 'skipped': True,
+                                'reason': 'already_in_progress'})
+            else:
+                results.append({'source': source_id, 'success': False, 'error': str(exc)})
         except Exception as exc:
             results.append({'source': source_id, 'success': False, 'error': str(exc)})
     return {'results': results, 'succeeded': sum(item['success'] for item in results),
-            'failed': sum(not item['success'] for item in results)}
+            'failed': sum(not item['success'] and not item.get('skipped') for item in results),
+            'skipped': sum(item.get('skipped', False) for item in results)}
 
 
 @app.post('/api/v1/sources/{source_id}/refresh')
@@ -151,6 +158,10 @@ def refresh(source_id: str):
         return refresh_source(DB_PATH,source_id)
     except KeyError:
         raise HTTPException(404,'Unknown source')
+    except RuntimeError as exc:
+        if str(exc) == 'Source refresh already in progress':
+            raise HTTPException(409, str(exc)) from exc
+        raise HTTPException(502, f'Refresh failed: {exc}') from exc
     except Exception as exc:
         raise HTTPException(502,f'Refresh failed: {exc}')
 
