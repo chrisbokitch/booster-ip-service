@@ -3,17 +3,14 @@ import threading
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from typing import Literal
-from .core import connect, init_db, sync_source_config, refresh_source, refresh_due_sources
-from .config import load_source_config
+from .core import connect, init_db, refresh_source, refresh_due_sources
 from .processing import source_data_status, aggregate
 
 DB_PATH = os.environ.get('BOOSTER_DB', 'data/booster.sqlite3')
 
 @asynccontextmanager
 async def lifespan(app):
-    definitions = load_source_config()
     init_db(DB_PATH)
-    sync_source_config(DB_PATH, definitions)
     stop = threading.Event()
     def scheduler():
         while not stop.wait(30):
