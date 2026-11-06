@@ -18,6 +18,7 @@
 <p id="message" role="status" aria-live="polite" class="muted"></p><textarea id="output" readonly spellcheck="false" aria-label="Normalized output"></textarea><p class="muted small">Copy and download operate on the displayed page. Refreshing sources updates the stored snapshots.</p>
 </div></div>
 </section>
+<dialog id="delete-format-dialog" aria-labelledby="delete-format-title"><h2 id="delete-format-title">Delete saved format?</h2><p id="delete-format-message">Are you sure?</p><div class="actions"><button id="cancel-delete-format" type="button">Cancel</button><button id="confirm-delete-format" type="button">Delete</button></div></dialog>
 <dialog id="save-format-dialog" aria-labelledby="save-format-title"><form id="save-format-form"><h2 id="save-format-title">Save output format</h2><p>This format will be saved only in this browser on this machine. It will not be available on other devices or browsers.</p><label for="saved-format-name">Format name</label><input id="saved-format-name" type="text" maxlength="60" required autocomplete="off"><p id="save-format-error" role="alert"></p><div class="actions"><button id="cancel-save-format" type="button">Cancel</button><button type="submit">Save</button></div></form></dialog>
 </main>
 </body></html>
