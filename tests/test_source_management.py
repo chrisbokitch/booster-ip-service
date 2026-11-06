@@ -31,8 +31,8 @@ def test_config_reconciliation_adds_updates_and_removes_sources(tmp_path, monkey
     sync_source_config(path, [])
     assert client.get("/api/v1/sources").json() == []
     assert client.post("/api/v1/sources", json={}).status_code == 405
-    assert client.put("/api/v1/sources/customfeed", json={}).status_code == 405
-    assert client.delete("/api/v1/sources/customfeed").status_code == 405
+    assert client.put("/api/v1/sources/customfeed", json={}).status_code == 404
+    assert client.delete("/api/v1/sources/customfeed").status_code == 404
 
 
 def test_removed_source_stays_removed_after_reconciliation(tmp_path):
