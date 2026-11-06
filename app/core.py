@@ -3,6 +3,7 @@ import ipaddress
 import json
 import sqlite3
 import threading
+import uuid
 from datetime import timedelta
 from datetime import datetime, timezone
 from pathlib import Path
@@ -37,6 +38,9 @@ def init_db(path):
         CREATE TABLE IF NOT EXISTS records (
           source_id TEXT NOT NULL REFERENCES sources(id), network TEXT NOT NULL,
           PRIMARY KEY(source_id,network)
+        );
+        CREATE TABLE IF NOT EXISTS refresh_leases (
+          source_id TEXT PRIMARY KEY, owner TEXT NOT NULL, expires_at TEXT NOT NULL
         );
         CREATE TABLE IF NOT EXISTS refresh_history (
           id INTEGER PRIMARY KEY AUTOINCREMENT, source_id TEXT NOT NULL,
@@ -89,7 +93,7 @@ def parse_feed(raw, fmt, json_path=None):
     return sorted(networks, key=lambda n: (ipaddress.ip_network(n).version, int(ipaddress.ip_network(n).network_address), ipaddress.ip_network(n).prefixlen))
 
 
-def _refresh_source(path, source_id, *, client=None, trigger="manual"):
+def _refresh_source(path, source_id, *, client=None, trigger="manual", owner=None):
     now = datetime.now(timezone.utc).isoformat()
     with connect(path) as db:
         row = db.execute("SELECT * FROM sources WHERE id=?", (source_id,)).fetchone()
@@ -114,6 +118,8 @@ def _refresh_source(path, source_id, *, client=None, trigger="manual"):
             if len(response.content) > 10_000_000:
                 raise ValueError("Feed exceeds 10 MB")
             networks = parse_feed(response.text, row['format'], row['json_path'])
+            if owner is not None:
+                _verify_lease(db, source_id, owner)
             db.execute("DELETE FROM records WHERE source_id=?", (source_id,))
             db.executemany("INSERT INTO records(source_id,network) VALUES (?,?)", [(source_id,n) for n in networks])
             db.execute("UPDATE sources SET last_success=?, last_error=NULL WHERE id=?", (now,source_id))
@@ -121,9 +127,12 @@ def _refresh_source(path, source_id, *, client=None, trigger="manual"):
             _advance_schedule(db, source_id, now)
             return {"source":source_id,"count":len(networks),"refreshed_at":now}
         except Exception as exc:
+            if owner is not None:
+                _verify_lease(db, source_id, owner)
             db.execute("UPDATE sources SET last_error=? WHERE id=?", (str(exc),source_id))
             db.execute("INSERT INTO refresh_history(source_id,at,success,error,trigger) VALUES (?,?,0,?,?)", (source_id,now,str(exc),trigger))
             _advance_schedule(db, source_id, now)
+            db.commit()
             raise
 
 def _advance_schedule(db, source_id, at):
@@ -135,18 +144,56 @@ def _advance_schedule(db, source_id, at):
     db.execute("UPDATE sources SET next_refresh=? WHERE id=?", (next_at, source_id))
 
 
+LEASE_SECONDS = 120
+
+
+def _claim_lease(path, source_id, owner):
+    now = datetime.now(timezone.utc)
+    expiry = (now + timedelta(seconds=LEASE_SECONDS)).isoformat()
+    with connect(path) as db:
+        # SQLite serializes the claim, including claims from other processes.
+        cursor = db.execute(
+            "INSERT INTO refresh_leases(source_id,owner,expires_at) VALUES (?,?,?) "
+            "ON CONFLICT(source_id) DO UPDATE SET owner=excluded.owner, "
+            "expires_at=excluded.expires_at WHERE refresh_leases.expires_at<=?",
+            (source_id, owner, expiry, now.isoformat()),
+        )
+        if cursor.rowcount != 1:
+            raise RuntimeError("Source refresh already in progress")
+
+
+def _verify_lease(db, source_id, owner):
+    row = db.execute(
+        "SELECT owner,expires_at FROM refresh_leases WHERE source_id=?", (source_id,)
+    ).fetchone()
+    if row is None or row["owner"] != owner or row["expires_at"] <= datetime.now(timezone.utc).isoformat():
+        raise RuntimeError("Refresh lease expired or ownership changed")
+
+
+def _release_lease(path, source_id, owner):
+    with connect(path) as db:
+        db.execute("DELETE FROM refresh_leases WHERE source_id=? AND owner=?", (source_id, owner))
+
+
 def refresh_source(path, source_id, *, client=None, trigger="manual"):
     if trigger not in ("manual", "scheduled"):
         raise ValueError("Invalid refresh trigger")
-    # Prevent overlapping manual and scheduled refreshes within the running process.
     with _refresh_locks_guard:
         lock = _refresh_locks.setdefault((str(path), source_id), threading.Lock())
     if not lock.acquire(blocking=False):
         raise RuntimeError("Source refresh already in progress")
+    owner = uuid.uuid4().hex
+    claimed = False
     try:
-        return _refresh_source(path, source_id, client=client, trigger=trigger)
+        _claim_lease(path, source_id, owner)
+        claimed = True
+        return _refresh_source(path, source_id, client=client, trigger=trigger, owner=owner)
     finally:
-        lock.release()
+        try:
+            if claimed:
+                _release_lease(path, source_id, owner)
+        finally:
+            lock.release()
 
 
 def refresh_due_sources(path, now=None):
