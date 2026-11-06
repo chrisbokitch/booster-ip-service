@@ -328,7 +328,7 @@ el("source-form").addEventListener("submit", async event => {
     el("source-dialog").close();
     if (!editingSource && payload.enabled) selectedSources.add(payload.id);
     await loadSources(); offset = 0; await loadData();
-    sourceMessage(result.snapshot_cleared ? "Source saved. Refresh it to load the new feed." : "Source saved.");
+    setSourceNotice(editingSource || payload.id, result.snapshot_cleared ? "Source saved. Refresh to load the new feed." : "Source saved.");
   } catch (error) { el("source-form-error").textContent = error.message; }
   finally { save.disabled = false; }
 });
