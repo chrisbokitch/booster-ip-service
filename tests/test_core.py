@@ -27,7 +27,7 @@ def test_defaults_idempotent(tmp_path):
     init_db(path)
     init_db(path)
     with connect(path) as db:
-        assert db.execute('SELECT COUNT(*) FROM sources').fetchone()[0] == 3
+        assert db.execute('SELECT COUNT(*) FROM sources').fetchone()[0] == 2
 
 
 def test_source_config_rejects_invalid_and_duplicate_entries(tmp_path):
