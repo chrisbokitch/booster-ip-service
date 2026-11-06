@@ -9,6 +9,7 @@ const formatterFields = ["header", "entry", "separator", "footer"];
 const savedFormatsKey = "booster-ip-service.saved-output-formats.v1";
 let savedFormats = {};
 let selectedSavedFormat = null;
+let pendingDeleteFormat = null;
 function currentFormatter() {
   return Object.fromEntries(formatterFields.map(field => [field, el("output-" + field).value]));
 }
@@ -40,7 +41,7 @@ function updateOutputMode() {
 function renderSavedFormatButtons() {
   const target = el("saved-output-buttons");
   target.replaceChildren();
-  for (const name of Object.keys(savedFormats)) {
+  for (const name of Object.keys(savedFormats).sort((a, b) => a.localeCompare(b, undefined, {sensitivity:"base"}))) {
     const wrapper = document.createElement("div");
     wrapper.className = "saved-format-item";
     const button = document.createElement("button");
@@ -65,28 +66,41 @@ function renderSavedFormatButtons() {
     remove.setAttribute("aria-label", "Remove saved format " + name);
     remove.title = "Remove " + name;
     remove.addEventListener("click", () => {
-      const updated = {...savedFormats};
-      delete updated[name];
-      try {
-        localStorage.setItem(savedFormatsKey, JSON.stringify(updated));
-      } catch (_) {
-        window.alert("Unable to remove the saved format from browser storage.");
-        return;
-      }
-      savedFormats = updated;
-      if (selectedSavedFormat === name) {
-        selectedSavedFormat = null;
-        outputMode = "list";
-      }
-      updateOutputMode();
-      saveOutputSettings();
-      renderOutput();
+      pendingDeleteFormat = name;
+      el("delete-format-message").textContent = 'Are you sure you want to delete "' + name + '"?';
+      el("delete-format-dialog").showModal();
     });
     wrapper.append(button, remove);
     target.append(wrapper);
   }
 }
 
+el("cancel-delete-format").addEventListener("click", () => el("delete-format-dialog").close());
+el("delete-format-dialog").addEventListener("close", () => { pendingDeleteFormat = null; });
+el("confirm-delete-format").addEventListener("click", () => {
+  const name = pendingDeleteFormat;
+  if (!name || !Object.hasOwn(savedFormats, name)) {
+    el("delete-format-dialog").close();
+    return;
+  }
+  const updated = {...savedFormats};
+  delete updated[name];
+  try {
+    localStorage.setItem(savedFormatsKey, JSON.stringify(updated));
+  } catch (_) {
+    window.alert("Unable to remove the saved format from browser storage.");
+    return;
+  }
+  savedFormats = updated;
+  if (selectedSavedFormat === name) {
+    selectedSavedFormat = null;
+    outputMode = "list";
+  }
+  el("delete-format-dialog").close();
+  updateOutputMode();
+  saveOutputSettings();
+  renderOutput();
+});
 function decodeEscapes(value) {
   return value.replace(/\\(n|t|\\)/g, (_, code) =>
     code === "n" ? "\n" : code === "t" ? "\t" : "\\");
