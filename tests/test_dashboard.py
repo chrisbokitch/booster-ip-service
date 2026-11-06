@@ -47,3 +47,11 @@ def test_inline_edit_mode_markup():
     assert 'localStorage.setItem(formatterKey' in js
     assert 'restoreFormatter();' in js
     assert 'if (editMode) actions.append(remove)' in js
+
+
+def test_page_size_handlers_do_not_include_output_mode_buttons():
+    from pathlib import Path
+    script = Path(main.__file__).parent / 'static' / 'app.js'
+    js = script.read_text(encoding='utf-8')
+    assert 'document.querySelectorAll(".page-size-control .page-preset")' in js
+    assert 'document.querySelectorAll(".page-preset")' not in js
