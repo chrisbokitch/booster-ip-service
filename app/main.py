@@ -1,20 +1,19 @@
 import os
-import re
 import threading
-from datetime import datetime, timezone, timedelta
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field, HttpUrl, ConfigDict
 from typing import Literal
-from sqlite3 import IntegrityError
-from .core import connect, init_db, refresh_source, refresh_due_sources
+from .core import connect, init_db, sync_source_config, refresh_source, refresh_due_sources
+from .config import load_source_config
 from .processing import source_data_status, aggregate
 
 DB_PATH = os.environ.get('BOOSTER_DB', 'data/booster.sqlite3')
 
 @asynccontextmanager
 async def lifespan(app):
+    definitions = load_source_config()
     init_db(DB_PATH)
+    sync_source_config(DB_PATH, definitions)
     stop = threading.Event()
     def scheduler():
         while not stop.wait(30):
@@ -33,55 +32,6 @@ async def lifespan(app):
 
 app = FastAPI(title='Booster IP Service', version='0.1.0', lifespan=lifespan)
 
-class SourceConfig(BaseModel):
-    model_config = ConfigDict(json_schema_extra={
-        "example": {
-            "name": "Example CIDR feed",
-            "url": "https://example.com/networks.txt",
-            "format": "cidr_text",
-            "json_path": None,
-            "enabled": True,
-            "refresh_interval_minutes": 1440,
-        }
-    })
-    name: str = Field(min_length=1, max_length=100, examples=["Example CIDR feed"])
-    url: HttpUrl = Field(examples=["https://example.com/networks.txt"])
-    format: Literal['cidr_text', 'ip_text', 'json'] = Field(description="Feed input format")
-    json_path: str | None = Field(default=None, description="Dot-separated path to the array for JSON feeds; omit for text feeds")
-    enabled: bool = True
-    refresh_interval_minutes: int | None = Field(default=None, ge=1, le=10080)
-
-
-class SourceInput(SourceConfig):
-    model_config = ConfigDict(json_schema_extra={
-        "example": {
-            "id": "example_feed",
-            "name": "Example CIDR feed",
-            "url": "https://example.com/networks.txt",
-            "format": "cidr_text",
-            "json_path": None,
-            "enabled": True,
-            "refresh_interval_minutes": 1440,
-        }
-    })
-    id: str = Field(pattern=r'^[a-z][a-z0-9_-]{1,63}$', examples=["example_feed"])
-
-
-def validate_source(source):
-    if source.format not in ('cidr_text', 'ip_text', 'json'):
-        raise HTTPException(422, 'Invalid source format')
-    if source.format == 'json' and not source.json_path:
-        raise HTTPException(422, 'JSON source requires json_path')
-    if source.json_path and not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*', source.json_path):
-        raise HTTPException(422, 'Invalid JSON path')
-    if source.url.scheme != 'https' or source.url.username or source.url.password:
-        raise HTTPException(422, 'HTTPS without credentials is required')
-
-
-def schedule_next(enabled, minutes):
-    return (datetime.now(timezone.utc) + timedelta(minutes=minutes)).isoformat() if enabled and minutes else None
-
-
 @app.get('/api/v1/health')
 def health():
     return {'status':'ok'}
@@ -96,52 +46,6 @@ def sources():
             result.append({**dict(row), 'data_status': source_data_status(row),
                            'cidr_count': len(aggregate(networks))})
         return result
-
-@app.post('/api/v1/sources', status_code=201)
-def create_source(source: SourceInput):
-    validate_source(source)
-    with connect(DB_PATH) as db:
-        try:
-            db.execute('INSERT INTO sources(id,name,url,format,json_path,enabled,refresh_interval_minutes,next_refresh) VALUES (?,?,?,?,?,?,?,?)',
-                       (source.id,source.name,str(source.url),source.format,source.json_path,int(source.enabled),
-                        source.refresh_interval_minutes, schedule_next(source.enabled, source.refresh_interval_minutes)))
-        except IntegrityError:
-            raise HTTPException(409,'Source ID already exists')
-    return {'id':source.id}
-
-@app.put('/api/v1/sources/{source_id}')
-def update_source(source_id: str, source: SourceConfig):
-    validate_source(source)
-    with connect(DB_PATH) as db:
-        previous = db.execute('SELECT * FROM sources WHERE id=?', (source_id,)).fetchone()
-        if previous is None:
-            raise HTTPException(404, 'Unknown source')
-        changed = (previous['url'] != str(source.url) or previous['format'] != source.format
-                   or previous['json_path'] != source.json_path)
-        db.execute('UPDATE sources SET name=?,url=?,format=?,json_path=?,enabled=?,'
-                   'last_success=CASE WHEN ? THEN NULL ELSE last_success END,'
-                   'last_error=CASE WHEN ? THEN NULL ELSE last_error END,'
-                   'refresh_interval_minutes=?,next_refresh=? WHERE id=?',
-                   (source.name, str(source.url), source.format, source.json_path,
-                    int(source.enabled), changed, changed, source.refresh_interval_minutes,
-                    (previous['next_refresh'] if previous['enabled'] and source.enabled
-                     and previous['refresh_interval_minutes'] == source.refresh_interval_minutes and not changed
-                     else schedule_next(source.enabled, source.refresh_interval_minutes)), source_id))
-        if changed:
-            db.execute('DELETE FROM records WHERE source_id=?', (source_id,))
-    return {'id': source_id, 'snapshot_cleared': changed}
-
-
-@app.delete('/api/v1/sources/{source_id}', status_code=204)
-def delete_source(source_id: str):
-    with connect(DB_PATH) as db:
-        if not db.execute('SELECT 1 FROM sources WHERE id=?', (source_id,)).fetchone():
-            raise HTTPException(404, 'Unknown source')
-        db.execute('INSERT OR IGNORE INTO deleted_sources(id) VALUES (?)', (source_id,))
-        db.execute('DELETE FROM refresh_history WHERE source_id=?', (source_id,))
-        db.execute('DELETE FROM records WHERE source_id=?', (source_id,))
-        db.execute('DELETE FROM sources WHERE id=?', (source_id,))
-
 
 @app.get('/api/v1/sources/{source_id}/history')
 def source_history(source_id: str, limit: int = 50):
