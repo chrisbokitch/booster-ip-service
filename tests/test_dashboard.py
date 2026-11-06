@@ -86,3 +86,18 @@ def test_source_save_and_remove_use_card_footers():
     assert 'setSourceNotice(row.id, "Remove failed: "' in js
     assert '"Source removed.", "source-footer"' in js
     assert 'sourceMessage(' not in js
+
+
+def test_named_custom_output_formats_are_browser_local():
+    client = TestClient(main.app)
+    html = client.get("/").text
+    js = client.get("/static/app.js").text
+    assert 'id="save-output-format"' in html
+    assert 'id="save-format-dialog"' in html
+    assert 'id="saved-format-name"' in html
+    assert 'id="saved-output-buttons"' in html
+    assert 'saved-output-formats.v1' in js
+    assert 'localStorage.setItem(savedFormatsKey' in js
+    assert 'outputMode = "saved"' in js
+    assert 'el("output-template-wrap").hidden = outputMode !== "custom"' in js
+    assert 'selectedSavedFormat' in js
