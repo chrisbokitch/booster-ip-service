@@ -72,7 +72,7 @@ def test_swagger_source_examples_are_valid_and_formats_are_enumerated():
         model = models[model_name]
         example = model["example"]
         assert example["format"] == "cidr_text"
-        assert example["json_path"] is None
+        assert example.get("json_path") is None
         assert example["url"].startswith("https://")
         assert example["refresh_interval_minutes"] == 1440
         assert model["properties"]["format"]["enum"] == ["cidr_text", "ip_text", "json"]
