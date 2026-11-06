@@ -136,8 +136,9 @@ async function loadSources() {
   const target = el("sources"); target.replaceChildren();
   for (const row of rows) {
     const card = node("article", "", "source");
-    card.append(node("h3", row.name), node("p", row.id + " · " + row.record_count + " stored records"));
-    card.append(node("p", row.data_status, "status " + row.data_status));
+    const heading = node("div", "", "source-heading");
+    heading.append(node("h3", row.name), node("span", row.data_status, "status " + row.data_status));
+    card.append(heading, node("p", row.record_count.toLocaleString() + " stored CIDR blocks"));
     card.append(node("p", "Last success: " + fmtDate(row.last_success)));
     if (row.refresh_interval_minutes) card.append(node("p", row.enabled ? "Next refresh: " + fmtDate(row.next_refresh) : "Automatic refresh paused (disabled)"));
     if (row.last_error) card.append(node("p", "Last error: " + row.last_error));
