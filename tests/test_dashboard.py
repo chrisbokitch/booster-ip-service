@@ -32,10 +32,17 @@ def test_inline_edit_mode_markup():
     assert 'id="cancel-edit-warning"' in home.text
     assert 'id="source-form"' in home.text
     assert 'id="refresh-all"' in home.text
+    assert 'id="output-list"' in home.text
+    assert 'id="output-custom"' in home.text
+    assert 'id="output-template"' in home.text
+    assert 'id="output-template-wrap" hidden' in home.text
     assert 'id="history-dialog"' in home.text
     assert client.get("/edit").status_code == 404
     js = client.get("/static/app.js").text
     assert 'el("edit-warning-dialog").showModal()' in js
     assert 'setEditMode(true)' in js
     assert 'setEditMode(false)' in js
+    assert 'template.includes("{value}")' in js
+    assert 'template.replaceAll("{values}"' in js
+    assert 'el("output-template").addEventListener("input", renderOutput)' in js
     assert 'if (editMode) actions.append(remove)' in js
