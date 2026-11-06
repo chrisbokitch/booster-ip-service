@@ -65,3 +65,14 @@ def test_output_sidebar_settings_are_persisted():
     assert "restoreOutputSettings();" in js
     assert "savedSourceIds.filter(id => enabledIds.includes(id))" in js
     assert "saveOutputSettings();" in js
+
+
+def test_source_management_feedback_has_separate_status_area():
+    client = TestClient(main.app)
+    home = client.get("/")
+    assert 'id="source-message" role="status"' in home.text
+    js = client.get("/static/app.js").text
+    assert 'function sourceMessage(value)' in js
+    assert 'sourceMessage(result.snapshot_cleared ?' in js
+    assert 'sourceMessage(row.name + " removed.")' in js
+    assert 'sourceMessage("Remove failed: " + error.message)' in js
