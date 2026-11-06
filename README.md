@@ -1,6 +1,6 @@
 # Booster IP Service
 
-Local-first source ingestion service for booster IP/CIDR feeds. **Phases 1–4**: configuration, ingestion, snapshots, normalization, cross-source aggregation, paginated IP/CIDR output, and a lightweight local dashboard.
+Local-first service for collecting, normalizing, and combining IP address and CIDR feeds. It maintains per-source snapshots, aggregates overlapping or adjacent ranges, and provides a dashboard and paginated API for consuming the results.
 
 ## Windows / Git Bash
 
@@ -19,7 +19,7 @@ Visit http://127.0.0.1:8000/ for the dashboard or http://127.0.0.1:8000/docs for
 - `uubooster`: CIDR text feed
 - `heybox`: JSON feed, `result.ips`
 
-Both sources are seeded automatically. **They are not fetched automatically** in Phase 1. To ingest data, open `/docs`, use `POST /api/v1/sources/{source_id}/refresh`, and supply `uubooster` or `heybox`. The latest successful snapshot remains available if a refresh fails. Use `GET /api/v1/sources` for status and `GET /api/v1/data?sources=heybox` for source-specific normalized records and metadata.
+Both sources are seeded automatically. Refresh them from the dashboard or with `POST /api/v1/sources/{source_id}/refresh`. The latest successful snapshot remains available if a refresh fails. Use `GET /api/v1/sources` for status and `GET /api/v1/data?sources=heybox` for source-specific normalized records and metadata.
 
 Use `POST /api/v1/sources` to register additional sources. Supported formats: `cidr_text`, `ip_text`, `json` (with a dot-separated `json_path`).
 
@@ -27,14 +27,7 @@ Use `POST /api/v1/sources` to register additional sources. Supported formats: `c
 
 This development server binds only to localhost and has **no authentication**. Do not expose it publicly or deploy it as-is. Admin endpoints, including source creation and refresh, require authentication before hosting. Sources are HTTPS-only, redirects are disabled, DNS must resolve exclusively to public IPs, and ingestion rejects empty/invalid feeds. Configured URLs should be treated as trusted administrator input; additional network egress controls and DNS-rebinding protections are recommended before deployment.
 
-## Phase 1 limitations
-
-- No scheduled refresh yet; manual refresh only.
-- No source edit/delete endpoints yet.
-- Dashboard is local-only; no authentication or public deployment support yet.
-- SQLite stores the latest successful snapshot per source and refresh history.
-
-## Phase 2 data API
+## Data API
 
 `GET /api/v1/data` combines the latest snapshots from all **enabled** sources by default. Use `sources=uubooster,heybox` to explicitly select sources (including disabled sources with existing snapshots). Source IDs are validated; unknown IDs return 404.
 
@@ -55,7 +48,7 @@ Both `GET /api/v1/sources` and the `source_status` entries in `GET /api/v1/data`
 
 `GET /api/v1/data` includes `complete`: `true` when **every selected source has a successful snapshot**, including stale snapshots; `false` when at least one selected source is pending. An empty source selection is vacuously complete. `complete` is an availability indicator, **not a freshness guarantee**. Check `data_status` and `last_success` for freshness. Source status is based on the latest recorded refresh result, not an elapsed-time threshold.
 
-## Phase 3: consumption and pagination
+## Output formats and pagination
 
 The `GET /api/v1/data` endpoint supports two representations using the `output` query parameter:
 
@@ -73,13 +66,13 @@ curl 'http://127.0.0.1:8000/api/v1/data?output=list&format=cidr&limit=10000' -o 
 curl 'http://127.0.0.1:8000/api/v1/data?output=json&format=ip&family=ipv4&limit=1000&offset=0'
 ```
 
-List output is newline-separated, with a trailing newline for nonempty pages. An empty result is an empty body. **List output is paginated, not an unbounded full download**; check the headers for more pages. The former `/api/v1/data.txt` endpoint has been removed.
+List output is newline-separated, with a trailing newline for nonempty pages. An empty result is an empty body. **List output is paginated, not an unbounded full download**; check the headers for more pages. 
 
 Error responses: 404 for unknown source IDs; 422 for invalid query parameters or an empty explicit source selection. A source with no snapshot contributes no records, and `complete=false` signals missing source snapshots. A stale source still contributes its last successful snapshot. Neither output mode refreshes feeds. API documentation is available at `/docs` and the OpenAPI schema at `/openapi.json`.
 
 **Deployment note:** This is a local-only unauthenticated development API. Do not expose it publicly until access policy and authentication are decided.
 
-## Phase 4: local dashboard
+## Local dashboard
 
 Open `http://127.0.0.1:8000/` after `npm run dev`. The dashboard uses plain HTML, CSS, and JavaScript, served directly by FastAPI with no frontend build step or extra dependencies. It shows source readiness, last successful refresh, record counts and errors; offers per-source manual refresh; and displays paginated combined CIDR or individual-IP output with address-family selection, copy-page, and download-page controls.
 
@@ -93,15 +86,15 @@ The combined output has checkboxes for individual enabled sources (all enabled s
 
 The dashboard offers 1,000 (default), 10,000, and Custom buttons. Custom enables an integer field for 1–1,000,000 results. The same upper bound is enforced by the API to avoid unbounded memory and response sizes, especially when expanding CIDRs into individual IP addresses. Large pages may be slow and memory-intensive; pagination remains recommended.
 
-## Phase 5: manual source management
+## Source management
 
 The local dashboard now supports adding sources, editing name/URL/format/JSON path/enabled status, removing sources, and refreshing all enabled sources. Source IDs are immutable after creation. Editing the feed URL, format, or JSON path **clears the old snapshot** to prevent publishing data associated with an outdated feed definition; refresh the source to populate it again. Changing name or enabled status preserves its snapshot. Deletion removes the source, its snapshot, and its refresh history. Deleted built-in sources are not silently re-created on restart; a source with the same ID can be manually added later.
 
-`PUT /api/v1/sources/{source_id}` updates a source, `DELETE /api/v1/sources/{source_id}` removes it, and `POST /api/v1/sources/refresh-all` refreshes each enabled source independently, returning per-source success/failure and totals. Automatic scheduling and refresh-history UI remain future work.
+`PUT /api/v1/sources/{source_id}` updates a source, `DELETE /api/v1/sources/{source_id}` removes it, and `POST /api/v1/sources/refresh-all` refreshes each enabled source independently, returning per-source success/failure and totals. Automatic scheduling and refresh history are also available.
 
 **Security:** These management endpoints are unauthenticated and must remain localhost-only. Do not expose the service on the public internet.
 
-## Phase 5.2: automatic refresh and history
+## Automatic refresh and history
 
 Edit a source to enable an automatic refresh interval (1, 6, 12 or 24 hours, or a custom interval of 1–10,080 minutes). Automatic refresh is **off by default**. Intervals and next-run timestamps are persisted in SQLite; disabling a source pauses its schedule. When enabled or reconfigured, the first automatic refresh is scheduled one interval later. Manual refreshes also reset the next scheduled run. A lightweight application-lifecycle worker checks for due refreshes every 30 seconds, while a per-source SQLite lease prevents simultaneous manual/scheduled refreshes across workers sharing the database. Leases expire after 120 seconds to recover from crashed workers; ownership is verified before writing snapshots, so an expired worker cannot overwrite newer data. Keep SQLite on a local filesystem shared by workers on the same host; separate hosts require a shared coordination service.
 
