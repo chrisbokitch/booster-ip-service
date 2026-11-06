@@ -6,16 +6,16 @@ let limitMode = "1000";
 let outputMode = "list";
 const formatterKey = "booster-ip-service.custom-output.v1";
 const formatterFields = ["header", "entry", "separator", "footer"];
-function decodeSeparator(value) {
+function decodeEscapes(value) {
   return value.replace(/\\(n|t|\\)/g, (_, code) =>
     code === "n" ? "\n" : code === "t" ? "\t" : "\\");
 }
 function formatOutput(values) {
   if (outputMode === "list") return values.join("\n");
-  const header = el("output-header").value;
-  const entry = el("output-entry").value;
-  const separator = decodeSeparator(el("output-separator").value);
-  const footer = el("output-footer").value;
+  const header = decodeEscapes(el("output-header").value);
+  const entry = decodeEscapes(el("output-entry").value);
+  const separator = decodeEscapes(el("output-separator").value);
+  const footer = decodeEscapes(el("output-footer").value);
   return header + values.map(value => entry.replaceAll("{value}", value)).join(separator) + footer;
 }
 function renderOutput() {
