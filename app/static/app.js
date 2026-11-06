@@ -71,7 +71,12 @@ async function loadSources() {
       try {
         await api("/api/v1/sources/" + encodeURIComponent(row.id) + "/refresh", {method:"POST"});
         await loadSources(); offset = 0; await loadData(); message(row.name + " refreshed.");
-      } catch (error) { message("Refresh failed: " + error.message); await loadSources(); }
+      } catch (error) {
+        message(error.message === "Source refresh already in progress"
+          ? row.name + " is already refreshing. No additional refresh was started."
+          : "Refresh failed: " + error.message);
+        await loadSources();
+      }
     });
     const edit = node("button", "Edit");
     edit.type = "button"; edit.addEventListener("click", () => openSourceDialog(row));
@@ -216,7 +221,10 @@ el("refresh-all").addEventListener("click", async () => {
   try {
     const result = await api("/api/v1/sources/refresh-all", {method:"POST"});
     await loadSources(); offset = 0; await loadData();
-    message("Refresh complete: " + result.succeeded + " succeeded, " + result.failed + " failed.");
+    const skipped = result.results.filter(item => item.skipped).map(item => item.source);
+    message("Refresh complete: " + result.succeeded + " succeeded, " + result.failed + " failed, "
+      + result.skipped + " skipped."
+      + (skipped.length ? " Already refreshing (no additional refresh started): " + skipped.join(", ") + "." : ""));
   } catch (error) { message("Refresh all failed: " + error.message); }
   finally { button.disabled = false; button.textContent = "Refresh all"; }
 });
