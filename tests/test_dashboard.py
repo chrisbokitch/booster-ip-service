@@ -36,7 +36,7 @@ def test_inline_edit_mode_markup():
     assert 'id="output-custom"' in home.text
     for field in ("header", "entry", "separator", "footer"):
         assert f'id="output-{field}"' in home.text
-    assert 'id="output-template-wrap" hidden' in home.text
+    assert 'id="output-template-wrap" class="output-template-fields" hidden' in home.text
     assert 'id="history-dialog"' in home.text
     assert client.get("/edit").status_code == 404
     js = client.get("/static/app.js").text
