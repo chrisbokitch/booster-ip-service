@@ -99,3 +99,12 @@ input[type=number]{background:#303a49;color:#edf3fa;border:1px solid #4a586c;bor
 /* Keep the Sources heading anchored when the action toolbar appears. */
 #sources-section>.section-heading{align-items:flex-start}
 #sources-section .sources-title{min-height:40px;align-items:center}
+
+/* Let the output field fill the height of the adjacent settings/analysis sidebar. */
+.output-layout{align-items:stretch}
+.output-results{display:flex;flex-direction:column;min-height:0}
+.output-results textarea{flex:1 1 auto;min-height:320px}
+.output-results>.muted.small{margin-top:12px;margin-bottom:0}
+@media(max-width:720px){
+  .output-results textarea{flex:none;min-height:320px}
+}
