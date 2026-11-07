@@ -108,3 +108,12 @@ input[type=number]{background:#303a49;color:#edf3fa;border:1px solid #4a586c;bor
 @media(max-width:720px){
   .output-results textarea{flex:none;min-height:320px}
 }
+
+/* Compact only the Sources panel header and its toolbar. */
+#sources-section{padding-top:12px}
+#sources-section>.section-heading{margin-bottom:12px;align-items:center}
+#sources-section .sources-title{min-height:0}
+#source-toolbar{gap:8px}
+#source-toolbar button{font-size:12px;padding:5px 9px}
+#toggle-sources{font-size:12px}
+@media(max-width:600px){#sources-section{padding-top:10px}}
