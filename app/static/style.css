@@ -92,3 +92,6 @@ input[type=number]{background:#303a49;color:#edf3fa;border:1px solid #4a586c;bor
 .output-analysis{background:#242b36;border:1px solid #394250;border-radius:9px;padding:16px}
 .output-analysis h3{font-size:15px;margin:0 0 12px}
 .output-analysis p{font-size:13px;line-height:1.6;margin:0;color:#c7d2df}
+
+/* Align the expanded Sources toolbar with its heading without extra vertical margins. */
+#source-toolbar{margin:0;align-items:center}
