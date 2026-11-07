@@ -121,3 +121,12 @@ input[type=number]{background:#303a49;color:#edf3fa;border:1px solid #4a586c;bor
 /* Consistent compact padding on every side of the Sources container. */
 #sources-section{padding:12px}
 @media(max-width:600px){#sources-section{padding:10px}}
+
+/* Restore horizontal breathing room while keeping Sources vertically compact. */
+#sources-section{padding:12px 24px}
+@media(max-width:600px){#sources-section{padding:10px 16px}}
+
+/* Reserve a stable header row regardless of toolbar visibility. */
+#sources-section>.section-heading{align-items:flex-start;min-height:32px}
+#sources-section .sources-title{height:32px;min-height:32px;align-items:center;flex:none}
+#source-toolbar{margin:0;align-self:flex-start}
