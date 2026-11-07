@@ -95,3 +95,7 @@ input[type=number]{background:#303a49;color:#edf3fa;border:1px solid #4a586c;bor
 
 /* Align the expanded Sources toolbar with its heading without extra vertical margins. */
 #source-toolbar{margin:0;align-items:center}
+
+/* Keep the Sources heading anchored when the action toolbar appears. */
+#sources-section>.section-heading{align-items:flex-start}
+#sources-section .sources-title{min-height:40px;align-items:center}
