@@ -78,3 +78,17 @@ input[type=number]{background:#303a49;color:#edf3fa;border:1px solid #4a586c;bor
 #about-dialog h2{margin:0 0 16px}
 #about-dialog p{font-size:14px;line-height:1.6;color:#c7d2df}
 #about-dialog .actions{justify-content:flex-end;margin-bottom:0}
+
+/* Compact source overview and output analysis. */
+.sources-title{display:flex;align-items:center;gap:12px}
+.section-toggle{border:0;background:none;color:#a6c7ee;padding:3px 0;text-decoration:underline;font-size:13px}
+.section-toggle:hover:not(:disabled){background:none;color:#d4e7ff}
+#source-toolbar[hidden]{display:none}
+.source-grid.compact{display:flex;flex-wrap:wrap;gap:9px}
+.source-chip{display:inline-flex;align-items:center;gap:10px;border:1px solid #394250;background:#242b36;border-radius:8px;padding:8px 12px;font-size:13px}
+.source-chip .status{font-size:12px;font-weight:700;text-transform:capitalize}
+#sources-section{padding-top:24px}
+.output-sidebar{min-width:0;display:flex;flex-direction:column;gap:16px}
+.output-analysis{background:#242b36;border:1px solid #394250;border-radius:9px;padding:16px}
+.output-analysis h3{font-size:15px;margin:0 0 12px}
+.output-analysis p{font-size:13px;line-height:1.6;margin:0;color:#c7d2df}
