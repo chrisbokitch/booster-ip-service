@@ -117,3 +117,7 @@ input[type=number]{background:#303a49;color:#edf3fa;border:1px solid #4a586c;bor
 #source-toolbar button{font-size:12px;padding:5px 9px}
 #toggle-sources{font-size:12px}
 @media(max-width:600px){#sources-section{padding-top:10px}}
+
+/* Consistent compact padding on every side of the Sources container. */
+#sources-section{padding:12px}
+@media(max-width:600px){#sources-section{padding:10px}}
