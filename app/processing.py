@@ -67,7 +67,8 @@ def get_data(path, selected=None, family="all", output_format="cidr", offset=0, 
             return {"sources": [], "format": output_format, "family": family,
                     "count": 0, "total": 0, "offset": offset, "limit": limit,
                     "data": [], "has_more": False, "next_offset": None,
-                    "complete": True, "source_status": {}}
+                    "complete": True, "source_status": {},
+                    "analysis": {"cidr_count": 0, "ip_count": 0}}
         placeholders = ",".join("?" for _ in ids)
         records = [row["network"] for row in db.execute(
             f"SELECT network FROM records WHERE source_id IN ({placeholders})", ids)]
@@ -76,6 +77,8 @@ def get_data(path, selected=None, family="all", output_format="cidr", offset=0, 
                         "enabled": bool(available[key]["enabled"]),
                         "data_status": source_data_status(available[key])} for key in ids}
     networks = aggregate(records, family)
+    analysis = {"cidr_count": len(networks),
+                "ip_count": sum(network.num_addresses for network in networks)}
     items, total = page_networks(networks, output_format, offset, limit)
     return {"sources": ids, "format": output_format, "family": family,
             "count": len(items), "total": total, "offset": offset,
@@ -83,4 +86,4 @@ def get_data(path, selected=None, family="all", output_format="cidr", offset=0, 
             "next_offset": offset + len(items) if offset + len(items) < total else None,
             "data": items,
             "complete": all(entry["data_status"] != "pending" for entry in status.values()),
-            "source_status": status}
+            "source_status": status, "analysis": analysis}
