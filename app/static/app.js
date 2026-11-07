@@ -4,6 +4,22 @@ el("open-about").addEventListener("click", () => el("about-dialog").showModal())
 el("close-about").addEventListener("click", () => el("about-dialog").close());
 let page = null, offset = 0, sources = [];
 let selectedSources = null;
+const sourcesModeKey = "booster-ip-service.sources-expanded.v1";
+let sourcesExpanded = false;
+try { sourcesExpanded = localStorage.getItem(sourcesModeKey) === "true"; } catch (_) {}
+function updateSourcesMode() {
+  el("sources").classList.toggle("compact", !sourcesExpanded);
+  el("source-toolbar").hidden = !sourcesExpanded;
+  el("toggle-sources").textContent = sourcesExpanded ? "Collapse" : "Expand";
+  el("toggle-sources").setAttribute("aria-expanded", String(sourcesExpanded));
+}
+el("toggle-sources").addEventListener("click", () => {
+  sourcesExpanded = !sourcesExpanded;
+  try { localStorage.setItem(sourcesModeKey, String(sourcesExpanded)); } catch (_) {}
+  updateSourcesMode();
+  renderSources();
+});
+updateSourcesMode();
 let limitMode = "1000";
 let outputMode = "list";
 const formatterKey = "booster-ip-service.custom-output.v1";
@@ -218,7 +234,20 @@ async function loadSources() {
     label.append(checkbox, node("span", row.name + (row.enabled ? "" : " (disabled)")));
     selection.append(label);
   }
+  renderSources();
+}
+function renderSources() {
+  const rows = sources;
   const target = el("sources"); target.replaceChildren();
+  if (!sourcesExpanded) {
+    for (const row of rows) {
+      const chip = node("div", "", "source-chip");
+      chip.append(node("span", row.name), node("span", row.data_status, "status " + row.data_status));
+      target.append(chip);
+    }
+    if (!rows.length) target.textContent = "No sources configured.";
+    return;
+  }
   for (const row of rows) {
     const card = node("article", "", "source");
     const heading = node("div", "", "source-heading");
@@ -272,15 +301,27 @@ function pageSize() {
 }
 async function loadData() {
   const limit = pageSize();
-  if (limit === null) { page = null; el("output").value = ""; return; }
+  if (limit === null) { page = null; el("output").value = ""; el("output-analysis-text").textContent = "Enter a valid page size to analyze output."; return; }
   if (!selectedSources || selectedSources.size === 0) {
     page = null; el("output").value = ""; el("summary").textContent = "0 selected sources";
+    el("output-analysis-text").textContent = "Select at least one source to analyze output.";
     for (const id of ["previous", "next", "copy", "download"]) el(id).disabled = true;
     message("Select at least one source to view output."); return;
   }
   const params = new URLSearchParams({format:el("format").value,family:el("family").value,limit:String(limit),offset:String(offset),sources:[...selectedSources].sort().join(",")});
   page = await api("/api/v1/data?" + params);
   renderOutput();
+  const stats = page.analysis;
+  if (stats) {
+    const freshness = Object.values(page.source_status || {}).some(source => source.data_status === "pending")
+      ? "Some source data is pending."
+      : Object.values(page.source_status || {}).some(source => source.data_status === "stale")
+        ? "Some source data is stale." : "Data is fresh.";
+    el("output-analysis-text").textContent = "Complete output contains " + stats.cidr_count.toLocaleString()
+      + " CIDRs representing " + stats.ip_count.toLocaleString() + " IPs. " + freshness;
+  } else {
+    el("output-analysis-text").textContent = "Output analysis is unavailable.";
+  }
   el("summary").textContent = page.total.toLocaleString() + " total · " + (page.complete ? "Complete" : "Missing source data");
   el("previous").disabled = offset === 0;
   el("next").disabled = !page.has_more;
